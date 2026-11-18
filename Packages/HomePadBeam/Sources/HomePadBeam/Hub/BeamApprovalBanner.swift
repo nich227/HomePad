@@ -72,18 +72,29 @@ public struct BeamRecentsView: View {
     }
 
     public var body: some View {
+        Group {
+            if receiver.preferences.keepHistory, receiver.recents.isEmpty {
+                // Outside the list, so it fills the screen instead of sitting in one row.
+                ContentUnavailableView(
+                    "No Recent Pages",
+                    systemImage: "clock",
+                    description: Text("Pages sent from a paired iPhone appear here.")
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                recentsList
+            }
+        }
+        .navigationTitle(Text("Recent Pages"))
+    }
+
+    private var recentsList: some View {
         List {
             if !receiver.preferences.keepHistory {
                 Section {
                     Text("Recent pages are turned off in Settings.")
                     OpenSettingsButton(title: "Open Settings")
                 }
-            } else if receiver.recents.isEmpty {
-                ContentUnavailableView(
-                    "No Recent Pages",
-                    systemImage: "clock",
-                    description: Text("Pages sent from a paired iPhone appear here.")
-                )
             } else {
                 ForEach(receiver.recents) { beam in
                     Button {
@@ -100,6 +111,5 @@ public struct BeamRecentsView: View {
                 }
             }
         }
-        .navigationTitle(Text("Recent Pages"))
     }
 }
