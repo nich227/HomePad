@@ -15,6 +15,8 @@ public protocol MusicService: AnyObject {
     func togglePlayPause()
     func skipToNext()
     func skipToPrevious()
+    /// Moves to a point in the track, in seconds from its start.
+    func seek(to seconds: TimeInterval)
 }
 
 @MainActor
@@ -77,6 +79,12 @@ public final class SystemMusicService: MusicService {
         player.skipToPreviousItem()
     }
 
+    public func seek(to seconds: TimeInterval) {
+        guard let duration = player.nowPlayingItem?.playbackDuration, duration > 0 else { return }
+        player.currentPlaybackTime = min(max(seconds, 0), duration)
+        refresh()
+    }
+
     private func refresh() {
         guard let item = player.nowPlayingItem else {
             nowPlaying = nil
@@ -124,5 +132,10 @@ public final class PreviewMusicService: MusicService {
 
     public func skipToPrevious() {
         nowPlaying?.elapsed = 0
+    }
+
+    public func seek(to seconds: TimeInterval) {
+        guard let duration = nowPlaying?.duration else { return }
+        nowPlaying?.elapsed = min(max(seconds, 0), duration)
     }
 }

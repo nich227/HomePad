@@ -10,10 +10,13 @@ import Vision
 public struct FacePhoto: Identifiable, Sendable {
     public let id: String
     public let image: UIImage
+    /// When the photo was chosen, for the caption on the Memories face. Nil when unknown.
+    public let addedAt: Date?
 
-    public init(id: String, image: UIImage) {
+    public init(id: String, image: UIImage, addedAt: Date? = nil) {
         self.id = id
         self.image = image
+        self.addedAt = addedAt
     }
 }
 
@@ -62,7 +65,7 @@ public final class FacePhotoLibrary {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try? jpeg.write(to: directory.appendingPathComponent("\(id).jpg"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }
-        picked.append(FacePhoto(id: id, image: image))
+        picked.append(FacePhoto(id: id, image: image, addedAt: Date()))
         return true
     }
 
@@ -116,7 +119,8 @@ public final class FacePhotoLibrary {
             .prefix(Self.limit)
             .compactMap { url -> FacePhoto? in
                 guard let image = UIImage(contentsOfFile: url.path) else { return nil }
-                return FacePhoto(id: url.deletingPathExtension().lastPathComponent, image: image)
+                let added = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+                return FacePhoto(id: url.deletingPathExtension().lastPathComponent, image: image, addedAt: added)
             }
         picked += stored
     }
@@ -135,7 +139,8 @@ public final class FacePhotoLibrary {
     private nonisolated static func liftSubject(from image: UIImage) async -> UIImage? {
         guard let cgImage = image.cgImage else { return nil }
         let handler = ImageRequestHandler(cgImage)
-        guard let observation = try? await handler.perform(GenerateForegroundInstanceMaskRequest()),
+        // People only. A photo with nobody in it keeps the plain layout, with the time on top.
+        guard let observation = try? await handler.perform(GeneratePersonInstanceMaskRequest()),
               !observation.allInstances.isEmpty,
               let buffer = try? observation.generateMaskedImage(for: observation.allInstances, imageFrom: handler) else { return nil }
         let masked = CIImage(cvPixelBuffer: buffer)

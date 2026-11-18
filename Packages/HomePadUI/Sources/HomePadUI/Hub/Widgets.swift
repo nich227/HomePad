@@ -89,7 +89,6 @@ extension HubWidgetKind {
         case .thermostat: "Thermostat"
         case .camera: "Camera"
         case .photo: "Photo"
-        case .messages: "Messages"
         }
     }
 }
@@ -142,14 +141,6 @@ struct WidgetContent: View {
             camera
         case .photo:
             photo
-        case .messages:
-            VStack(alignment: .leading, spacing: metrics.pt(1.5)) {
-                heading("Messages", symbol: "message.fill")
-                Spacer(minLength: 0)
-                Text("Open Messages")
-                    .font(.system(size: metrics.text(3.4), weight: .semibold))
-                    .foregroundStyle(.white)
-            }
         }
     }
 
@@ -184,13 +175,14 @@ struct WidgetContent: View {
                 Text(snapshot.conditionText)
                 Text("H:\(units.degrees(snapshot.highCelsius)) L:\(units.degrees(snapshot.lowCelsius))")
             } else {
-                Text("Not set up")
+                Text(WeatherMessage(problem: environment.weather.problem).title)
             }
         }
         .font(.system(size: metrics.text(2.9), weight: .medium))
         .foregroundStyle(Color.hubSecondaryText)
         .lineLimit(1)
         .accessibilityElement(children: .combine)
+        .startsOnFirstUse(when: isInUse) { environment.weather.begin() }
     }
 
     private var timers: some View {

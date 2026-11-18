@@ -28,6 +28,7 @@ struct FlowFace: View {
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hubIsNight) private var isNight
     @Environment(HouseholdSession.self) private var session
     @State private var focus = FlowFocus()
 
@@ -36,7 +37,14 @@ struct FlowFace: View {
     private static let lavender = Color(red: 0.86, green: 0.78, blue: 0.97)
 
     /// Rest positions of the four digit shapes: hours on top, minutes below.
-    private static let digitRests = [FlowPoint(x: 0.3, y: 0.3), FlowPoint(x: 0.68, y: 0.3), FlowPoint(x: 0.32, y: 0.72), FlowPoint(x: 0.7, y: 0.72)]
+    private static let stackedRests = [FlowPoint(x: 0.3, y: 0.3), FlowPoint(x: 0.68, y: 0.3), FlowPoint(x: 0.32, y: 0.72), FlowPoint(x: 0.7, y: 0.72)]
+    /// On a wide screen the four digits sit in one row.
+    private static let rowRests = [FlowPoint(x: 0.16, y: 0.5), FlowPoint(x: 0.38, y: 0.5), FlowPoint(x: 0.62, y: 0.5), FlowPoint(x: 0.84, y: 0.5)]
+
+    private var digitRests: [FlowPoint] {
+        metrics.isLandscape ? Self.rowRests : Self.stackedRests
+    }
+
     /// Loose drops sit toward the edges. One between two digits reads as a decimal point.
     private static let satelliteRests = [FlowPoint(x: 0.1, y: 0.52), FlowPoint(x: 0.9, y: 0.5), FlowPoint(x: 0.5, y: 0.07), FlowPoint(x: 0.92, y: 0.9)]
 
@@ -51,7 +59,11 @@ struct FlowFace: View {
         )
         let columns = TimeTextPolicy.digitColumns(for: ClockReading(date: date, calendar: calendar), hourCycle: units.hourCycle)
         ZStack {
-            field(parameters)
+            if isNight {
+                Color.black
+            } else {
+                field(parameters)
+            }
             ZStack {
                 RadialGradient(
                     colors: [Self.blue, Self.pink],
@@ -63,7 +75,7 @@ struct FlowFace: View {
             }
             .mask { shapes(columns: columns, parameters: parameters) }
             .shadow(color: Self.pink.opacity(0.5), radius: metrics.pt(2.5))
-            if density == .detailed {
+            if density.showsLabels {
                 Text(FaceText.dateLine(date, calendar: calendar, density: density, locale: locale))
                     .font(.system(size: metrics.text(3), weight: .semibold))
                     .foregroundStyle(.white.opacity(0.9))
@@ -98,11 +110,13 @@ struct FlowFace: View {
         let hidesLeadingZero = units.hourCycle == .twelve && columns[0] == 0
         return Canvas { context, size in
             context.addFilter(.alphaThreshold(min: 0.5, color: .white))
-            context.addFilter(.blur(radius: size.width * 0.016))
+            context.addFilter(.blur(radius: min(size.width, size.height) * 0.016))
             context.drawLayer { layer in
-                let font = Font.system(size: size.width * 0.44 * parameters.scale, weight: .black, design: .rounded)
-                let count = Self.digitRests.count + Self.satelliteRests.count
-                for (index, rest) in Self.digitRests.enumerated() where !(index == 0 && hidesLeadingZero) {
+                let unit = min(size.width, size.height)
+                let rests = digitRests
+                let font = Font.system(size: unit * 0.44 * parameters.scale, weight: .black, design: .rounded)
+                let count = rests.count + Self.satelliteRests.count
+                for (index, rest) in rests.enumerated() where !(index == 0 && hidesLeadingZero) {
                     let moved = FlowField.displaced(rest: rest, index: index, count: count, parameters: parameters)
                     layer.draw(
                         Text(verbatim: "\(columns[index])").font(font).foregroundStyle(.white),
@@ -110,8 +124,8 @@ struct FlowFace: View {
                     )
                 }
                 for (index, rest) in Self.satelliteRests.enumerated() {
-                    let moved = FlowField.displaced(rest: rest, index: Self.digitRests.count + index, count: count, parameters: parameters)
-                    let radius = size.width * (0.035 + 0.012 * CGFloat(index % 3))
+                    let moved = FlowField.displaced(rest: rest, index: rests.count + index, count: count, parameters: parameters)
+                    let radius = unit * (0.035 + 0.012 * CGFloat(index % 3))
                     let rect = CGRect(x: moved.x * size.width - radius, y: moved.y * size.height - radius, width: radius * 2, height: radius * 2)
                     layer.fill(Path(ellipseIn: rect), with: .color(.white))
                 }

@@ -161,23 +161,68 @@ import Testing
         #expect(NightSchedule(isEnabled: false).nextBoundary(after: Fixtures.date(), calendar: Fixtures.utc) == nil)
     }
 
-    private func appearance(_ schedule: NightSchedule, hour: Int, ambient: AmbientLightHint? = nil, wakeUntil: Date? = nil) -> NightAppearance {
-        NightModePolicy.appearance(schedule: schedule, now: Fixtures.date(hour: hour), calendar: Fixtures.utc, ambient: ambient, wakeUntil: wakeUntil)
+    private func appearance(_ schedule: NightSchedule, hour: Int, ambient: AmbientLightHint? = nil, override: NightOverride? = nil) -> NightAppearance {
+        NightModePolicy.appearance(schedule: schedule, now: Fixtures.date(hour: hour), calendar: Fixtures.utc, ambient: ambient, override: override)
     }
 
-    @Test func appearance_whenInsideWindow_thenDimRedClock() {
+    @Test func appearance_whenInsideWindow_thenNight() {
         #expect(appearance(NightSchedule(isEnabled: true), hour: 23) == .night(brightness: NightModePolicy.dimBrightness))
         #expect(appearance(NightSchedule(isEnabled: true), hour: 12) == .day)
         #expect(appearance(NightSchedule(isEnabled: false), hour: 23) == .day)
+        #expect(NightAppearance.night(brightness: 0.1).isNight && !NightAppearance.day.isNight)
     }
 
-    @Test func appearance_whenTappedAwake_thenDayUntilDeadline() {
+    @Test func override_whenSwitchedByHand_thenDecidesUntilTheNextStartOrEndHour() {
         let schedule = NightSchedule(isEnabled: true)
-        let now = Fixtures.date(hour: 23)
-        let deadline = NightModePolicy.wakeDeadline(from: now)
-        #expect(deadline == now.addingTimeInterval(30))
-        #expect(appearance(schedule, hour: 23, wakeUntil: deadline) == .day)
-        #expect(appearance(schedule, hour: 23, wakeUntil: now.addingTimeInterval(-1)) != .day)
+        let evening = Fixtures.date(hour: 23)
+        let off = NightModePolicy.toggled(from: .night(brightness: 0.06), schedule: schedule, now: evening, calendar: Fixtures.utc)
+        #expect(off == NightOverride(isNight: false, expires: Fixtures.date(day: 2, hour: 7, minute: 0)))
+        #expect(appearance(schedule, hour: 23, override: off) == .day)
+        let afternoon = Fixtures.date(hour: 15)
+        let on = NightModePolicy.toggled(from: .day, schedule: NightSchedule(isEnabled: false), now: afternoon, calendar: Fixtures.utc)
+        #expect(on == NightOverride(isNight: true, expires: Fixtures.date(hour: 22, minute: 0)))
+        #expect(appearance(NightSchedule(isEnabled: false), hour: 15, override: on) == .night(brightness: NightModePolicy.dimBrightness))
+        // Past its end the override no longer counts and the schedule decides again.
+        #expect(appearance(schedule, hour: 23, override: NightOverride(isNight: false, expires: Fixtures.date(hour: 22))) != .day)
+        #expect(NightModePolicy.active(nil, now: evening) == nil)
+        #expect(NightModePolicy.active(off, now: evening) == off)
+        #expect(NightModePolicy.active(off, now: Fixtures.date(day: 2, hour: 7, minute: 0)) == nil)
+    }
+
+    @Test func override_whenAskedForByName_thenOnlyAChangeMakesOne() {
+        let schedule = NightSchedule(isEnabled: true)
+        let evening = Fixtures.date(hour: 23)
+        let night = NightAppearance.night(brightness: NightModePolicy.dimBrightness)
+        let kept = NightOverride(isNight: true, expires: evening.addingTimeInterval(60))
+        #expect(NightModePolicy.override(setting: true, from: night, existing: nil, schedule: schedule, now: evening, calendar: Fixtures.utc) == nil)
+        #expect(NightModePolicy.override(setting: true, from: night, existing: kept, schedule: schedule, now: evening, calendar: Fixtures.utc) == kept)
+        let off = NightModePolicy.override(setting: false, from: night, existing: kept, schedule: schedule, now: evening, calendar: Fixtures.utc)
+        #expect(off == NightOverride(isNight: false, expires: Fixtures.date(day: 2, hour: 7, minute: 0)))
+        let on = NightModePolicy.override(setting: true, from: .day, existing: nil, schedule: schedule, now: Fixtures.date(hour: 15), calendar: Fixtures.utc)
+        #expect(on == NightOverride(isNight: true, expires: Fixtures.date(hour: 22, minute: 0)))
+        #expect(NightModePolicy.override(setting: false, from: .day, existing: nil, schedule: schedule, now: evening, calendar: Fixtures.utc) == nil)
+    }
+
+    @Test func override_whenScheduleHasNoHours_thenLastsHalfADay() {
+        let empty = NightSchedule(isEnabled: true, startHour: 5, endHour: 5)
+        let now = Fixtures.date()
+        #expect(empty.nextHourBoundary(after: now, calendar: Fixtures.utc) == nil)
+        let override = NightModePolicy.toggled(from: .day, schedule: empty, now: now, calendar: Fixtures.utc)
+        #expect(override.expires == now.addingTimeInterval(NightModePolicy.fallbackOverrideDuration))
+        #expect(NightSchedule(isEnabled: false).nextHourBoundary(after: Fixtures.date(hour: 23), calendar: Fixtures.utc) == Fixtures.date(day: 2, hour: 7, minute: 0))
+    }
+
+    @Test func quietTime_whenSwitchedOn_thenLastsUntilTheMorningAndSwitchesOff() {
+        let schedule = NightSchedule(isEnabled: false)
+        let now = Fixtures.date(hour: 20)
+        let quiet = QuietTime.toggled(from: nil, schedule: schedule, now: now, calendar: Fixtures.utc)
+        #expect(quiet == QuietTime(expires: Fixtures.date(day: 2, hour: 7, minute: 0)))
+        #expect(quiet?.isActive(at: now) == true)
+        #expect(quiet?.isActive(at: Fixtures.date(day: 2, hour: 7, minute: 0)) == false)
+        #expect(QuietTime.toggled(from: quiet, schedule: schedule, now: now, calendar: Fixtures.utc) == nil)
+        // One that already ran out is switched on again, not off.
+        let stale = QuietTime(expires: now.addingTimeInterval(-1))
+        #expect(QuietTime.toggled(from: stale, schedule: schedule, now: now, calendar: Fixtures.utc) == quiet)
     }
 
     @Test func appearance_whenFollowingRoomLight_thenLitRoomCancelsAndDarkRoomStarts() {

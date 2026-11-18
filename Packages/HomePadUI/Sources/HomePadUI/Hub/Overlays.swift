@@ -4,9 +4,8 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// Who the hub thinks is in front of it, and the way between the face and the Home Screen,
-/// drawn in the black beside the canvas so nothing sits on a face. Tapping the avatar opens the
-/// manual switcher.
+/// Who the hub thinks is in front of it, and the way between the face and the Home Screen, for
+/// the side of a fold that holds the status. Tapping the avatar opens the control center.
 struct BezelStatusView: View {
     let profile: HouseholdProfile?
     let isSomeonePresent: Bool
@@ -110,7 +109,7 @@ struct BezelStatusView: View {
         .buttonStyle(.plain)
         .hoverEffect(.highlight)
         .accessibilityLabel(profile.map { Text("Profile: \($0.name)") } ?? Text("Profile: Guest"))
-        .accessibilityHint("Opens the profile switcher.")
+        .accessibilityHint("Opens the control center.")
         .accessibilityIdentifier("hub.profile")
     }
 
@@ -177,90 +176,6 @@ private struct FittedToWidth<Content: View>: View {
     }
 }
 
-/// Picks who is using the hub by hand. This personalizes the hub but never unlocks personal
-/// content; only a recognized face does that.
-struct ProfileSwitcher: View {
-    let session: HouseholdSession
-    let showsSetupHint: Bool
-    let onUnlock: () -> Void
-    let onClose: () -> Void
-    @Environment(\.hubMetrics) private var metrics
-    @Environment(\.hubShowsDeviceUnlock) private var showsDeviceUnlock
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.55)
-                .onTapGesture(perform: onClose)
-                .accessibilityHidden(true)
-            VStack(spacing: metrics.pt(3.5)) {
-                Text("Who Is Using HomePad?")
-                    .font(.system(size: metrics.text(4.4), weight: .bold))
-                    .foregroundStyle(.white)
-                ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: metrics.pt(4)) {
-                        ForEach(session.profiles) { profile in
-                            person(profile: profile, name: profile.name, isCurrent: session.activeProfile?.id == profile.id) {
-                                try? session.switchManually(to: profile.id)
-                                onClose()
-                            }
-                        }
-                        person(profile: nil, name: String(localized: "Guest"), isCurrent: session.isGuest) {
-                            session.lock()
-                            onClose()
-                        }
-                    }
-                    .padding(.horizontal, metrics.pt(2))
-                }
-                .scrollIndicators(.hidden)
-                if showsDeviceUnlock {
-                    GlassCapsuleButton(
-                        title: "Unlock with Touch ID",
-                        symbol: "touchid",
-                        tint: Color(RainbowTint.red).opacity(0.45),
-                        identifier: "switcher.deviceUnlock"
-                    ) {
-                        onUnlock()
-                        onClose()
-                    }
-                }
-                Text(showsSetupHint
-                    ? "No one is set up yet. To add people, turn on Setup Mode in Settings."
-                    : "Choosing a person here personalizes the hub. Personal content unlocks only when the hub recognizes their face.")
-                    .font(.system(size: metrics.text(2.9)))
-                    .foregroundStyle(Color.hubSecondaryText)
-                    .multilineTextAlignment(.center)
-                HStack(spacing: metrics.pt(3)) {
-                    HubSettingsButton()
-                    GlassCapsuleButton(title: "Done", symbol: "checkmark", tint: Color.accentColor.opacity(0.6), identifier: "switcher.done", action: onClose)
-                }
-            }
-            .padding(metrics.pt(5))
-            .frame(maxWidth: metrics.pt(84))
-            .hubGlass(in: RoundedRectangle(cornerRadius: metrics.pt(7), style: .continuous))
-            .accessibilityAddTraits(.isModal)
-        }
-    }
-
-    private func person(profile: HouseholdProfile?, name: String, isCurrent: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: metrics.pt(1.4)) {
-                ProfileAvatar(profile: profile, diameter: metrics.pt(15))
-                    .overlay(Circle().stroke(.white, lineWidth: isCurrent ? metrics.pt(0.7) : 0))
-                Text(name)
-                    .font(.system(size: metrics.text(3.1), weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-            .frame(width: metrics.pt(19))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.lift)
-        .accessibilityLabel(Text(name))
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
-    }
-}
-
 /// Running timers as one glass capsule at the bottom of a face.
 struct TimerStripView: View {
     let strip: TimerStrip
@@ -306,34 +221,6 @@ struct TimerStripView: View {
             .accessibilityIdentifier("hub.timerStrip")
             .accessibilityValue(Text(strip.entries.map { "\($0.name) \($0.countdown)" }.joined(separator: ", ")))
         }
-    }
-}
-
-/// The nightstand clock: dim red digits on black. Red keeps eyes adjusted to the dark. Any tap
-/// brings the normal hub back for a moment.
-struct NightClockView: View {
-    @Environment(\.hubMetrics) private var metrics
-    @Environment(\.hubUnits) private var units
-    @Environment(\.calendar) private var calendar
-
-    var body: some View {
-        TimelineView(.periodic(from: .startOfCurrentSecond, by: 5)) { timeline in
-            let time = FaceText.clock(timeline.date, calendar: calendar, density: .glanceable, units: units)
-            ZStack {
-                Color.black
-                Text(time.digits)
-                    .font(.clockDigits(size: metrics.pt(34), weight: .medium))
-                    .foregroundStyle(Color(red: 0.55, green: 0.04, blue: 0.02))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(.horizontal, metrics.pt(6))
-            }
-        }
-        .contentShape(Rectangle())
-        .accessibilityElement()
-        .accessibilityIdentifier("hub.nightClock")
-        .accessibilityLabel("Night clock")
-        .accessibilityHint("Tap to wake the hub.")
     }
 }
 
@@ -510,8 +397,7 @@ struct BeamTakeoverView: View {
     }
 }
 
-/// The Home Screen's widgets in the space beside the canvas: the second column of the fill
-/// layout, or one side of a fold. They are drawn at their usual proportions and scaled to the
+/// The Home Screen's widgets on the side of a fold that holds the status. They are drawn at their usual proportions and scaled to the
 /// grid that fits the space best.
 struct SideColumn: View {
     /// False where a timer strip is shown right above, so timers are not listed twice.

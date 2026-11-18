@@ -58,6 +58,21 @@ import Testing
         #expect(hooks == HubTestHooks.none)
         #expect(!hooks.isEphemeral && !hooks.usesSampleData && !hooks.forcesNight && !hooks.skipsWelcome && !hooks.offersDeviceUnlock)
         #expect(hooks.audience == nil && hooks.proximity == nil && hooks.canvas == nil)
+        #expect(!hooks.usesSolidGlass && !hooks.showsSampleAssistant && hooks.slowMotion == nil)
+    }
+
+    @Test func hooks_whenGlassMotionAndAssistantSet_thenParsed() {
+        let hooks = HubTestHooks(environment: [
+            "HOMEPAD_UITEST_SOLID_GLASS": "1",
+            "HOMEPAD_UITEST_SLOW_MOTION": "8",
+            "HOMEPAD_UITEST_ASSISTANT": "1",
+            "HOMEPAD_UITEST_PROXIMITY": "mid",
+        ])
+        #expect(hooks.usesSolidGlass && hooks.showsSampleAssistant)
+        #expect(hooks.slowMotion == 8)
+        #expect(hooks.proximity == .mid)
+        #expect(HubTestHooks(environment: ["HOMEPAD_UITEST_SLOW_MOTION": "0.5"]).slowMotion == nil)
+        #expect(HubTestHooks(environment: ["HOMEPAD_UITEST_SLOW_MOTION": "slow"]).slowMotion == nil)
     }
 
     @Test func hooks_whenVariablesSet_thenParsed() {

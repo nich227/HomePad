@@ -2,24 +2,32 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// How a home tile is drawn: glass over a wallpaper on faces, solid fills in the Home app.
-enum HomeTileStyle {
-    case glass
-    case solid
+private struct HubSendKey: EnvironmentKey {
+    static let defaultValue: @MainActor (HubEvent) -> Void = { _ in }
 }
 
-/// One small square tile: an icon, a name, and where it is. Tapping acts on it. A lit tile
-/// means the accessory is on.
+extension EnvironmentValues {
+    /// Sends an event to the hub's state machine: open an app, an inline control, an overlay.
+    var hubSend: @MainActor (HubEvent) -> Void {
+        get { self[HubSendKey.self] }
+        set { self[HubSendKey.self] = newValue }
+    }
+}
+
+/// One tile of the home: a round badge with its glyph at the top and two lines of text at the
+/// bottom. A tap switches it and a held press opens its slider. A tile that is on is solid white
+/// with dark text.
 struct HomeTileView: View {
     let tile: HomeTile
-    let style: HomeTileStyle
-    var showsSubtitle = true
     @Environment(\.hubMetrics) private var metrics
+    @Environment(\.faceDensity) private var density
     @Environment(\.hubAudience) private var audience
     @Environment(\.hubMayRunScenes) private var mayRunScenes
+    @Environment(\.hubMotion) private var motion
+    @Environment(\.hubSend) private var send
     @Environment(HubEnvironment.self) private var environment
 
-    private var isActive: Bool {
+    private var isOn: Bool {
         if case .accessory(let accessory) = tile { return accessory.isOn && accessory.kind != .lock }
         return false
     }
@@ -44,58 +52,67 @@ struct HomeTileView: View {
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous)
-        Button(action: activate) {
-            Group {
-                if case .camera(let camera) = tile {
-                    environment.home.cameraView(id: camera.id, live: false)
-                } else {
-                    label
+        let info = content
+        Group {
+            if case .camera(let camera) = tile {
+                cameraTile(camera)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .top) {
+                        TileBadge(symbol: info.symbol, isOn: isOn)
+                        Spacer(minLength: 0)
+                        if isLockedScene {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: metrics.textToken(13), weight: .bold))
+                                .foregroundStyle(.white.opacity(0.8))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    TileCaption(title: info.title, subtitle: info.subtitle, isOn: isOn)
                 }
+                .padding(metrics.token(14))
+                .opacity(isLockedScene ? 0.5 : 1)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(shape)
         }
-        .buttonStyle(.plain)
-        .modifier(HomeTileBackground(style: style, isActive: isActive, shape: shape))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background {
+            if isOn {
+                shape.fill(Color.white)
+            }
+        }
+        .hubGlass(in: shape, tint: isOn ? Color.white : nil, interactive: true)
         .clipShape(shape)
-        .overlay(alignment: .topTrailing) {
-            if isLockedScene {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: metrics.pt(2.6), weight: .bold))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .padding(metrics.pt(2.2))
-                    .accessibilityHidden(true)
-            }
-        }
+        .contentShape(shape)
+        .onTapGesture(perform: activate)
+        .onLongPressGesture(minimumDuration: 0.45, perform: openDetail)
+        .animation(motion.snappy, value: isOn)
         .hoverEffect(.highlight)
-        .accessibilityLabel(Text(verbatim: "\(content.title), \(content.subtitle)"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: "\(info.title), \(info.subtitle)"))
         .accessibilityHint(isLockedScene ? Text("Scenes run only for household members the hub recognizes.") : Text(verbatim: ""))
-        .accessibilityAddTraits(isActive ? .isSelected : [])
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction(named: "Open Controls", openDetail)
+        .accessibilityIdentifier("home.tile.\(tile.id)")
     }
 
-    private var label: some View {
-        let info = content
-        let lit = isActive && style == .solid
-        let primary: Color = lit ? Color(white: 0.1) : .white
-        let icon: Color = lit ? Color(RainbowTint.orange) : .white
-        return VStack(spacing: metrics.pt(0.6)) {
-            Image(systemName: info.symbol)
-                .font(.system(size: metrics.pt(7.5)))
-                .frame(height: metrics.pt(11))
-                .foregroundStyle(icon)
-            Text(info.title)
-                .font(.system(size: metrics.text(2.9), weight: .semibold))
-                .foregroundStyle(primary)
-            if showsSubtitle {
-                Text(info.subtitle)
-                    .font(.system(size: metrics.text(2.7)))
-                    .foregroundStyle(primary.opacity(0.62))
+    private func cameraTile(_ camera: HomeCamera) -> some View {
+        environment.home.cameraView(id: camera.id, live: false)
+            .overlay(alignment: .topTrailing) {
+                Circle()
+                    .fill(Color(RainbowTint.red))
+                    .frame(width: metrics.token(8), height: metrics.token(8))
+                    .padding(metrics.token(12))
+                    .accessibilityHidden(true)
             }
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .padding(.horizontal, metrics.pt(1.5))
-        .opacity(isLockedScene ? 0.45 : 1)
+            .overlay(alignment: .bottomLeading) {
+                Text(camera.name)
+                    .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle), weight: .semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.6), radius: metrics.token(3))
+                    .padding(metrics.token(12))
+                    .opacity(density.showsLabels ? 1 : 0)
+            }
     }
 
     private func activate() {
@@ -106,170 +123,167 @@ struct HomeTileView: View {
         case .scene(let scene):
             guard mayRunScenes else { return }
             Task { await environment.home.runScene(id: scene.id) }
-        case .camera:
-            break
+        case .camera(let camera):
+            send(.tapInlineControl(.camera(id: camera.id)))
+        }
+    }
+
+    /// The slider behind a tile, for an accessory that has one.
+    private func openDetail() {
+        if case .accessory(let accessory) = tile, accessory.brightness != nil {
+            send(.tapInlineControl(.dimmer(id: accessory.id)))
         }
     }
 }
 
-private struct HomeTileBackground<S: Shape>: ViewModifier {
-    let style: HomeTileStyle
-    let isActive: Bool
-    let shape: S
-
-    func body(content: Content) -> some View {
-        switch style {
-        case .glass:
-            content.hubGlass(in: shape, tint: isActive ? Color.white.opacity(0.18) : nil, interactive: true)
-        case .solid:
-            content.background(shape.fill(isActive ? Color(white: 0.93) : Color.hubTileFill))
-        }
-    }
-}
-
-/// The large thermostat tile: the target temperature with down and up controls.
+/// The large thermostat tile: a badge, the target temperature in very large numerals, the name
+/// and room, and a chevron on each side to step it. A tap anywhere else opens the dial.
 struct ThermostatTile: View {
     let thermostat: HomeThermostat
-    let style: HomeTileStyle
-    var numberSize: CGFloat = 25
     @Environment(\.hubMetrics) private var metrics
+    @Environment(\.faceDensity) private var density
     @Environment(\.hubUnits) private var units
+    @Environment(\.hubSend) private var send
     @Environment(HubEnvironment.self) private var environment
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous)
         VStack(spacing: 0) {
+            TileBadge(symbol: "thermometer.medium", points: 40)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Spacer(minLength: 0)
             Text(verbatim: "\(units.temperature.rounded(fromCelsius: thermostat.targetCelsius))")
-                .font(.system(size: metrics.pt(numberSize), weight: .semibold, design: .rounded))
+                .font(.system(size: metrics.token(DesignTokens.hero(for: density) * 1.5), weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .contentTransition(.numericText())
-                .minimumScaleFactor(0.5)
+                .minimumScaleFactor(0.4)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            HStack(alignment: .center) {
+            HStack(alignment: .center, spacing: 0) {
                 step(-1, symbol: "chevron.down", label: "Lower Temperature")
                 Spacer(minLength: 0)
-                VStack(spacing: metrics.pt(0.3)) {
+                VStack(spacing: metrics.token(1)) {
                     Text(thermostat.name)
-                        .font(.system(size: metrics.text(2.9), weight: .bold))
+                        .font(.system(size: metrics.textToken(DesignTokens.tileTitle), weight: .semibold))
                         .foregroundStyle(.white)
-                    Text(verbatim: "\(thermostat.roomName) \u{00B7} \(units.degrees(thermostat.currentCelsius))")
-                        .font(.system(size: metrics.text(2.7)))
-                        .foregroundStyle(.white.opacity(0.7))
+                    Text(thermostat.roomName)
+                        .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle)))
+                        .foregroundStyle(Color.hubSecondaryText)
+                        .opacity(density.showsLabels ? 1 : 0)
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
                 step(1, symbol: "chevron.up", label: "Raise Temperature")
             }
-            .padding(.horizontal, metrics.pt(3))
-            .padding(.bottom, metrics.pt(numberSize > 20 ? 4 : 1.5))
         }
+        .padding(metrics.token(14))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(HomeTileBackground(style: style, isActive: false, shape: shape))
+        .hubGlass(in: shape, interactive: true)
+        .contentShape(shape)
+        .onTapGesture { send(.tapInlineControl(.thermostat(id: thermostat.id))) }
         .accessibilityElement(children: .contain)
+        .accessibilityAction(named: "Open Thermostat") { send(.tapInlineControl(.thermostat(id: thermostat.id))) }
+        .accessibilityIdentifier("home.thermostat")
     }
 
     private func step(_ direction: Int, symbol: String, label: LocalizedStringKey) -> some View {
-        Button {
+        let side = max(metrics.token(DesignTokens.minimumTouch), HubMetrics.minimumTouchSide)
+        return Button {
             let target = ThermostatMath.stepped(targetCelsius: thermostat.targetCelsius, direction: direction, unit: units.temperature)
             Task { await environment.home.setTargetTemperature(celsius: target, thermostatID: thermostat.id) }
         } label: {
             Image(systemName: symbol)
-                .font(.system(size: metrics.pt(4.4), weight: .semibold))
+                .font(.system(size: metrics.token(24), weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: metrics.pt(9), height: metrics.pt(9))
+                .frame(width: side, height: side)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .opacity(density.showsControls ? 1 : 0)
+        .allowsHitTesting(density.showsControls)
+        .accessibilityHidden(!density.showsControls)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(direction > 0 ? "home.thermostat.up" : "home.thermostat.down")
     }
 }
 
-/// Soft abstract shapes in one hue, standing in for a wallpaper behind glass tiles.
-struct AbstractWallpaper: View {
-    let tint: RainbowTint
-    @Environment(\.hubMetrics) private var metrics
-
-    var body: some View {
-        let color = Color(tint)
-        ZStack {
-            LinearGradient(colors: [color.opacity(0.95), color.opacity(0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            Circle()
-                .fill(.white.opacity(0.2))
-                .frame(width: metrics.pt(90))
-                .offset(x: metrics.pt(-26), y: metrics.pt(-30))
-            Circle()
-                .fill(.black.opacity(0.18))
-                .frame(width: metrics.pt(80))
-                .offset(x: metrics.pt(34), y: metrics.pt(30))
-            RoundedRectangle(cornerRadius: metrics.pt(12), style: .continuous)
-                .fill(.white.opacity(0.14))
-                .frame(width: metrics.pt(70), height: metrics.pt(36))
-                .rotationEffect(.degrees(-38))
-                .offset(x: metrics.pt(20), y: metrics.pt(-18))
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-/// Favorite accessories and scenes as glass tiles: a large thermostat, a clock, and four small
-/// tiles, on a three by three grid.
-struct HomeModularFace: View {
+/// The analog clock on a frosted disc, as a tile.
+struct ClockTile: View {
     let date: Date
     @Environment(\.hubMetrics) private var metrics
-    @Environment(\.faceDensity) private var density
-    @Environment(HubEnvironment.self) private var environment
     @Environment(HouseholdSession.self) private var session
 
     var body: some View {
+        let accent = session.activeProfile.map { Color($0.tint) } ?? Color(RainbowTint.orange)
+        AnalogDial(date: date, markers: .minuteTicks, dialColor: Color.white.opacity(0.1), secondColor: accent)
+            .padding(metrics.token(10))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .hubTile(metrics)
+    }
+}
+
+/// The home as a bento of glass tiles over the wallpaper: a large thermostat, a clock, a camera,
+/// and a dock of quick toggles, on the grid the space gives.
+struct HomeModularFace: View {
+    let date: Date
+    @Environment(\.hubMetrics) private var metrics
+    @Environment(\.hubMotion) private var motion
+    @Environment(HubEnvironment.self) private var environment
+
+    var body: some View {
         let home = environment.home
-        let gap = metrics.pt(2.4)
-        let cell = (metrics.side - metrics.pt(3.2) * 2 - gap * 2) / 3
-        let tiles = HomeFavorites.smallTiles(in: home.snapshot, limit: 4)
-        let detailed = density == .detailed
+        let board = metrics.boardSize
+        let grid = TileGrid(width: Double(board.width), height: Double(board.height))
+        let tiles = HomeFavorites.smallTiles(in: home.snapshot, limit: grid.cellCount)
+        let placed = HomeModularLayout.placements(in: grid, tileCount: tiles.count)
         ZStack {
-            AbstractWallpaper(tint: session.activeProfile?.tint ?? .blue)
-            VStack(spacing: gap) {
-                HStack(spacing: gap) {
-                    largeTile(detailed: detailed)
-                        .frame(width: cell * 2 + gap, height: cell * 2 + gap)
-                    VStack(spacing: gap) {
-                        AnalogDial(date: date, markers: .hourTicks, secondColor: .white)
-                            .padding(metrics.pt(1))
-                            .frame(width: cell, height: cell)
-                        small(tiles, 0, detailed: detailed).frame(width: cell, height: cell)
+            HubWallpaper()
+            GlassEffectContainer(spacing: metrics.gutter) {
+                TileBoard(grid: grid, gap: metrics.gutter) {
+                    ForEach(placed, id: \.slot) { item in
+                        slotView(item.slot, tiles: tiles)
+                            .tile(item.placement)
+                            .transition(.scale(scale: 0.86).combined(with: .opacity))
                     }
                 }
-                HStack(spacing: gap) {
-                    ForEach(1..<4, id: \.self) { index in
-                        small(tiles, index, detailed: detailed).frame(width: cell, height: cell)
-                    }
-                }
+                .animation(motion.spring, value: placed.map(\.slot))
             }
+            .frame(width: board.width, height: board.height)
+            .padding(metrics.boardInsets)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .startsOnFirstUse { home.start() }
     }
 
     @ViewBuilder
-    private func largeTile(detailed: Bool) -> some View {
-        if let thermostat = environment.home.snapshot.thermostats.first {
-            ThermostatTile(thermostat: thermostat, style: .glass, numberSize: detailed ? 25 : 31)
-        } else {
-            VStack(spacing: metrics.pt(2)) {
-                Image(systemName: "house.fill").font(.system(size: metrics.pt(16)))
-                Text(homeMessage)
-                    .font(.system(size: metrics.text(3.2), weight: .semibold))
-                    .multilineTextAlignment(.center)
+    private func slotView(_ slot: HomeModularLayout.Slot, tiles: [HomeTile]) -> some View {
+        switch slot {
+        case .hero:
+            if let thermostat = environment.home.snapshot.thermostats.first {
+                ThermostatTile(thermostat: thermostat)
+            } else {
+                noHomeTile
             }
-            .foregroundStyle(.white)
-            .padding(metrics.pt(4))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .hubTile(metrics)
+        case .clock:
+            ClockTile(date: date)
+        case .tile(let index):
+            HomeTileView(tile: tiles[index])
         }
+    }
+
+    private var noHomeTile: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TileBadge(symbol: "house.fill", points: 40)
+            Spacer(minLength: 0)
+            Text(homeMessage)
+                .font(.system(size: metrics.textToken(DesignTokens.tileTitle + 5), weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(metrics.token(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .hubTile(metrics)
     }
 
     private var homeMessage: String {
@@ -280,23 +294,15 @@ struct HomeModularFace: View {
         case .unknown: String(localized: "Home")
         }
     }
-
-    @ViewBuilder
-    private func small(_ tiles: [HomeTile], _ index: Int, detailed: Bool) -> some View {
-        if tiles.indices.contains(index) {
-            HomeTileView(tile: tiles[index], style: .glass, showsSubtitle: detailed)
-        } else {
-            Color.clear
-        }
-    }
 }
 
-/// Up to nine cameras in a grid.
+/// One, four, or nine cameras edge to edge with a thin gutter. A tap opens one full screen.
 struct HomeCameraFace: View {
     let date: Date
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.faceDensity) private var density
     @Environment(\.hubUnits) private var units
+    @Environment(\.hubSend) private var send
     @Environment(\.calendar) private var calendar
     @Environment(HubEnvironment.self) private var environment
 
@@ -304,7 +310,7 @@ struct HomeCameraFace: View {
         let home = environment.home
         let cameras = Array(home.snapshot.cameras.prefix(CameraGrid.limit))
         let dimensions = CameraGrid.dimensions(count: cameras.count)
-        let gap = metrics.pt(2.4)
+        let gap = metrics.token(4)
         ZStack {
             Color.black
             if cameras.isEmpty {
@@ -313,6 +319,7 @@ struct HomeCameraFace: View {
                     Text("No Cameras").font(.system(size: metrics.text(4.4), weight: .semibold))
                     Text(FaceText.clock(date, calendar: calendar, density: density, units: units).digits)
                         .font(.clockDigits(size: metrics.pt(12)))
+                        .contentTransition(.numericText())
                 }
                 .foregroundStyle(Color.hubSecondaryText)
             } else {
@@ -325,7 +332,6 @@ struct HomeCameraFace: View {
                         }
                     }
                 }
-                .padding(metrics.pt(3.2))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -336,22 +342,39 @@ struct HomeCameraFace: View {
     private func cell(_ cameras: [HomeCamera], _ index: Int) -> some View {
         if cameras.indices.contains(index) {
             let camera = cameras[index]
-            environment.home.cameraView(id: camera.id, live: false)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .bottomLeading) {
-                    if density == .detailed {
-                        Text(camera.name)
-                            .font(.system(size: metrics.text(2.8), weight: .semibold))
-                            .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.6), radius: metrics.pt(0.5))
-                            .padding(metrics.pt(2))
+            Button {
+                send(.tapInlineControl(.camera(id: camera.id)))
+            } label: {
+                environment.home.cameraView(id: camera.id, live: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .topLeading) {
+                        RoomBadge(text: camera.roomName.isEmpty ? camera.name : camera.roomName)
+                            .padding(metrics.token(12))
+                            .opacity(density.showsLabels ? 1 : 0)
                     }
-                }
-                .clipShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
-                .accessibilityElement()
-                .accessibilityLabel(Text(verbatim: "\(camera.name), \(camera.roomName)"))
+                    .clipShape(RoundedRectangle(cornerRadius: metrics.token(12), style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: "\(camera.name), \(camera.roomName)"))
+            .accessibilityIdentifier("camera.\(camera.id)")
         } else {
             Color.clear
         }
+    }
+}
+
+/// A small glass capsule naming a room, in the corner of a camera picture.
+struct RoomBadge: View {
+    let text: String
+    @Environment(\.hubMetrics) private var metrics
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle), weight: .semibold))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .padding(.horizontal, metrics.token(12))
+            .padding(.vertical, metrics.token(6))
+            .hubGlass(in: Capsule())
     }
 }

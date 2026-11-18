@@ -69,14 +69,11 @@ public struct HomeScreenLayout: Equatable, Sendable {
 
     public static func defaultLayout(for owner: LayoutOwner) -> HomeScreenLayout {
         let items: [HomeScreenItem] = [
-            .app(.messages), .app(.beam), .widget(.weather),
-            .app(.home), .app(.music),
-            .widget(.timers), .app(.timers), .app(.alarms),
-            .app(.recipes), .app(.clock),
-            .app(.photos), .app(.mirror), .widget(.nowPlaying),
-            .app(.weather), .app(.projectedApps),
-            .widget(.home), .widget(.messages),
-            .app(.people), .app(.pairing), .app(.settings),
+            .widget(.nowPlaying), .widget(.weather), .widget(.home), .widget(.timers),
+            .app(.home), .app(.music), .app(.calendar),
+            .app(.beam), .app(.photos), .app(.timers), .app(.alarms),
+            .app(.intercom), .app(.weather), .app(.recipes), .app(.mirror),
+            .app(.clock), .app(.projectedApps), .app(.people), .app(.pairing), .app(.settings),
         ]
         return HomeScreenLayout(items: items).sanitized(for: owner)
     }
@@ -108,7 +105,8 @@ extension HomeScreenLayout: Codable {
         case lastFace, items
     }
 
-    /// Unknown faces and items are dropped instead of failing the whole file.
+    /// Unknown faces and items are dropped instead of failing the whole file. That covers a
+    /// layout saved by an earlier version that had an app or widget this one does not.
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let face = try container.decodeIfPresent(String.self, forKey: .lastFace)

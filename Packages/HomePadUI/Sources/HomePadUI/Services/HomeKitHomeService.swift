@@ -62,7 +62,8 @@ public final class HomeKitHomeService: NSObject, HomeService {
                 if service.serviceType == HMServiceTypeThermostat {
                     let current = Self.double(service, HMCharacteristicTypeCurrentTemperature) ?? 0
                     let target = Self.double(service, HMCharacteristicTypeTargetTemperature) ?? current
-                    thermostats.append(HomeThermostat(id: id, name: service.name, roomName: room, currentCelsius: current, targetCelsius: target))
+                    let mode = Self.double(service, HMCharacteristicTypeTargetHeatingCooling).flatMap { ThermostatMode(rawValue: Int($0)) }
+                    thermostats.append(HomeThermostat(id: id, name: service.name, roomName: room, currentCelsius: current, targetCelsius: target, mode: mode))
                 } else if let kind = Self.kind(of: service) {
                     accessories.append(HomeAccessory(
                         id: id,
@@ -71,6 +72,7 @@ public final class HomeKitHomeService: NSObject, HomeService {
                         kind: kind,
                         isOn: Self.isOn(service, kind: kind),
                         brightness: Self.double(service, HMCharacteristicTypeBrightness).map { Int($0.rounded()) },
+                        colorTemperature: Self.double(service, HMCharacteristicTypeColorTemperature).map { Int($0.rounded()) },
                         isReachable: accessory.isReachable
                     ))
                 }
@@ -78,7 +80,9 @@ public final class HomeKitHomeService: NSObject, HomeService {
             for profile in accessory.cameraProfiles ?? [] {
                 let id = profile.uniqueIdentifier.uuidString
                 profiles[id] = profile
-                cameras.append(HomeCamera(id: id, name: accessory.name, roomName: room))
+                // Talking needs both a speaker and a microphone the camera lets an app use.
+                let talks = profile.speakerControl != nil && profile.microphoneControl != nil
+                cameras.append(HomeCamera(id: id, name: accessory.name, roomName: room, supportsTwoWayAudio: talks))
             }
         }
         let scenes = home.actionSets
@@ -95,7 +99,8 @@ public final class HomeKitHomeService: NSObject, HomeService {
         let tracked = [
             HMCharacteristicTypePowerState, HMCharacteristicTypeBrightness, HMCharacteristicTypeActive,
             HMCharacteristicTypeCurrentLockMechanismState, HMCharacteristicTypeCurrentTemperature,
-            HMCharacteristicTypeTargetTemperature,
+            HMCharacteristicTypeTargetTemperature, HMCharacteristicTypeTargetHeatingCooling,
+            HMCharacteristicTypeColorTemperature,
         ]
         let characteristics = home.accessories
             .filter(\.isReachable)
@@ -156,6 +161,32 @@ public final class HomeKitHomeService: NSObject, HomeService {
             return
         }
         await write(celsius, to: service, HMCharacteristicTypeTargetTemperature)
+    }
+
+    public func setThermostatMode(_ mode: ThermostatMode, thermostatID: String) async {
+        guard let service = service(id: thermostatID) else {
+            lastError = .unknownAccessory
+            return
+        }
+        await write(mode.rawValue, to: service, HMCharacteristicTypeTargetHeatingCooling)
+    }
+
+    public func setColorTemperature(_ mireds: Int, accessoryID: String) async {
+        guard let service = service(id: accessoryID) else {
+            lastError = .unknownAccessory
+            return
+        }
+        await write(mireds, to: service, HMCharacteristicTypeColorTemperature)
+    }
+
+    /// Two-way audio is a setting of the live stream, so it applies only while one is open.
+    public func setCameraTalk(_ isOn: Bool, cameraID: String) async {
+        guard let stream = cameraProfiles[cameraID]?.streamControl?.cameraStream else {
+            lastError = .notSupported
+            return
+        }
+        let setting: HMCameraAudioStreamSetting = isOn ? .bidirectionalAudioAllowed : .incomingAudioAllowed
+        lastError = (try? await stream.updateAudioStreamSetting(setting)) == nil ? .failed : nil
     }
 
     public func cameraView(id: String, live: Bool) -> AnyView {

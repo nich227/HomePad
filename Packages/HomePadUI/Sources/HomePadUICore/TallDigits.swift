@@ -151,6 +151,13 @@ public struct HubTestHooks: Equatable, Sendable {
     public let role: DeviceRole?
     /// Lay the hub out as if a fold divides the display in two.
     public let foldsHub: Bool
+    /// Draw glass as solid fills, as Reduce Transparency does. A test cannot turn that setting on.
+    public let usesSolidGlass: Bool
+    /// Run the shell's animations this many times slower, so a test can catch them part way.
+    public let slowMotion: Double?
+    /// Supply a stand-in assistant, so the control that opens one and its host can be captured
+    /// before the real one exists.
+    public let showsSampleAssistant: Bool
 
     public static let none = HubTestHooks(environment: [:])
 
@@ -169,5 +176,8 @@ public struct HubTestHooks: Equatable, Sendable {
         viewport = environment["HOMEPAD_UITEST_VIEWPORT"].flatMap(TestViewport.init)
         role = environment["HOMEPAD_UITEST_ROLE"].flatMap(DeviceRole.init(rawValue:))
         foldsHub = flag("FOLD")
+        usesSolidGlass = flag("SOLID_GLASS")
+        showsSampleAssistant = flag("ASSISTANT")
+        slowMotion = environment["HOMEPAD_UITEST_SLOW_MOTION"].flatMap(Double.init).flatMap { $0 >= 1 ? $0 : nil }
     }
 }

@@ -27,6 +27,7 @@ public enum UISettings {
             switch face {
             case .modular: "Modular"
             case .photos: "Photos"
+            case .memories: "Memories"
             case .weather: "Weather"
             case .homeModular: "Home Modular"
             case .calendar: "Calendar"
@@ -117,7 +118,9 @@ public enum UISettings {
     public enum Display {
         public static let pane = "Display"
 
-        public static let canvas = SettingKey<String>("ui.display.canvas", default: CanvasMode.square.rawValue)
+        public static let canvas = SettingKey<String>("ui.display.canvas", default: CanvasMode.fill.rawValue)
+        /// Seconds without a touch before the hub goes back to its face. Zero means never.
+        public static let idleReturn = SettingKey<Int>("ui.display.idleReturn", default: 120)
         public static let adaptiveDetail = SettingKey<Bool>("ui.display.adaptiveDetail", default: true)
         public static let keepAwake = SettingKey<Bool>("ui.display.keepAwake", default: true)
         public static let hourCycle = SettingKey<String>("ui.display.hourCycle", default: "automatic")
@@ -129,10 +132,23 @@ public enum UISettings {
                 title: "Screen Layout",
                 pane: pane,
                 options: [
+                    .init(title: "Fill the Screen", value: "fill"),
                     .init(title: "Square (like HomeView)", value: "square"),
-                    .init(title: "Fill the screen", value: "fill"),
                 ],
-                footer: "Square centers the face on black. Fill adds a second column beside it."
+                footer: "Fill lays every face and app out for the whole screen. Square centers a square on black."
+            ),
+            SettingDescriptor(
+                idleReturn,
+                title: "Return to Face After",
+                pane: pane,
+                options: [
+                    .init(title: "30 Seconds", value: "30"),
+                    .init(title: "1 Minute", value: "60"),
+                    .init(title: "2 Minutes", value: "120"),
+                    .init(title: "5 Minutes", value: "300"),
+                    .init(title: "Never", value: "0"),
+                ],
+                footer: "With no touch for this long, the Home Screen and apps go back to the face. An app stays while something is playing."
             ),
             SettingDescriptor(
                 adaptiveDetail,
@@ -172,7 +188,7 @@ public enum UISettings {
                 enabled,
                 title: "Night Mode",
                 pane: pane,
-                footer: "Dims the hub to a red clock at night. Tap the screen to wake it for a moment."
+                footer: "Turns everything on the hub red on black and dims the screen at night. You can also switch it for one evening from the control center on the hub."
             ),
             SettingDescriptor(startHour, title: "Starts At", pane: pane, options: hourOptions),
             SettingDescriptor(endHour, title: "Ends At", pane: pane, options: hourOptions),
@@ -203,18 +219,29 @@ public enum UISettings {
     public enum Weather {
         public static let pane = "Weather"
 
+        public static let location = SettingKey<String>("ui.weather.location", default: WeatherLocationSource.current.rawValue)
         public static let locationName = SettingKey<String>("ui.weather.locationName", default: "")
         public static let latitude = SettingKey<String>("ui.weather.latitude", default: "")
         public static let longitude = SettingKey<String>("ui.weather.longitude", default: "")
 
         public static let descriptors: [SettingDescriptor] = [
+            SettingDescriptor(
+                location,
+                title: "Location",
+                pane: pane,
+                options: [
+                    .init(title: "Current Location", value: "current"),
+                    .init(title: "Custom", value: "custom"),
+                ],
+                footer: "Current Location asks for Location Services the first time weather is shown. Custom uses the city and coordinates below."
+            ),
             SettingDescriptor(locationName, title: "City", pane: pane),
             SettingDescriptor(latitude, title: "Latitude", pane: pane),
             SettingDescriptor(
                 longitude,
                 title: "Longitude",
                 pane: pane,
-                footer: "HomePad does not use Location Services. Enter the hub's coordinates in decimal degrees to show weather."
+                footer: "For Custom, enter the coordinates in decimal degrees."
             ),
         ]
     }
@@ -223,11 +250,76 @@ public enum UISettings {
         Faces.descriptors + Display.descriptors + Night.descriptors + HomeScreen.descriptors + Weather.descriptors
 }
 
-/// A place to show weather for, entered by hand in Settings.
+/// Where the weather is for.
+public enum WeatherLocationSource: String, CaseIterable, Sendable {
+    /// Wherever the hub is, from Location Services.
+    case current
+    /// The city and coordinates entered in Settings.
+    case custom
+}
+
+/// What the person has said about Location Services, reduced to what the weather needs.
+public enum LocationPermission: Equatable, Sendable {
+    case notDetermined
+    case denied
+    case allowed
+}
+
+/// Why there is no weather to show. Each has its own message and, where it helps, a way into
+/// Settings.
+public enum WeatherProblem: Equatable, Sendable {
+    /// Location Services has not been asked for yet. It is asked the first time weather shows.
+    case needsLocationPermission
+    case locationDenied
+    /// Allowed, and waiting for a position.
+    case locating
+    /// Custom is chosen and no usable coordinates are entered.
+    case customLocationMissing
+    /// The place is known and the weather service did not answer.
+    case serviceUnavailable
+
+    /// Whether opening Settings can fix it.
+    public var isFixedInSettings: Bool {
+        self == .locationDenied || self == .customLocationMissing
+    }
+}
+
+public enum WeatherPlace: Equatable, Sendable {
+    case ready(WeatherLocation)
+    case unavailable(WeatherProblem)
+
+    /// The place to ask the weather service about, or why there is none yet.
+    public static func resolve(
+        source: WeatherLocationSource,
+        custom: WeatherLocation?,
+        permission: LocationPermission,
+        fix: WeatherLocation?
+    ) -> WeatherPlace {
+        switch source {
+        case .custom:
+            return custom.map { .ready($0) } ?? .unavailable(.customLocationMissing)
+        case .current:
+            switch permission {
+            case .notDetermined: return .unavailable(.needsLocationPermission)
+            case .denied: return .unavailable(.locationDenied)
+            case .allowed: return fix.map { .ready($0) } ?? .unavailable(.locating)
+            }
+        }
+    }
+}
+
+/// A place to show weather for: entered by hand in Settings, or found by Location Services.
 public struct WeatherLocation: Equatable, Sendable {
     public let name: String
     public let latitude: Double
     public let longitude: Double
+
+    /// A position from Location Services, with the place name once it is known.
+    public init(name: String, latitude: Double, longitude: Double) {
+        self.name = name
+        self.latitude = latitude
+        self.longitude = longitude
+    }
 
     /// Nil unless both coordinates parse and are on the globe.
     public init?(name: String, latitude: String, longitude: String) {
@@ -267,13 +359,16 @@ public struct HubPreferences: Equatable, Sendable {
     public var night: NightSchedule
     public var homeShowsWidgets: Bool
     public var homeWallpaper: HomeWallpaper
+    public var weatherSource: WeatherLocationSource
     public var weatherLocation: WeatherLocation?
+    /// Nil when the hub never returns to the face by itself.
+    public var idleReturn: TimeInterval?
     public var setupMode: Bool
     public var deviceRole: String
 
     public init(
         faces: FaceOptions = FaceOptions(),
-        canvas: CanvasMode = .square,
+        canvas: CanvasMode = .fill,
         adaptiveDetail: Bool = true,
         keepAwake: Bool = true,
         hourCycle: HourCycleSetting = .automatic,
@@ -281,7 +376,9 @@ public struct HubPreferences: Equatable, Sendable {
         night: NightSchedule = NightSchedule(isEnabled: false),
         homeShowsWidgets: Bool = true,
         homeWallpaper: HomeWallpaper = .face,
+        weatherSource: WeatherLocationSource = .current,
         weatherLocation: WeatherLocation? = nil,
+        idleReturn: TimeInterval? = 120,
         setupMode: Bool = true,
         deviceRole: String = "automatic"
     ) {
@@ -294,7 +391,9 @@ public struct HubPreferences: Equatable, Sendable {
         self.night = night
         self.homeShowsWidgets = homeShowsWidgets
         self.homeWallpaper = homeWallpaper
+        self.weatherSource = weatherSource
         self.weatherLocation = weatherLocation
+        self.idleReturn = idleReturn.flatMap { $0 > 0 ? $0 : nil }
         self.setupMode = setupMode
         self.deviceRole = deviceRole
     }
@@ -318,7 +417,7 @@ public struct HubPreferences: Equatable, Sendable {
                 photosShuffleMinutes: settings[Faces.photosShuffleMinutes],
                 flowReactsToPresence: settings[Faces.flowReactsToPresence]
             ),
-            canvas: CanvasMode(rawValue: settings[Display.canvas]) ?? .square,
+            canvas: CanvasMode(rawValue: settings[Display.canvas]) ?? .fill,
             adaptiveDetail: settings[Display.adaptiveDetail],
             keepAwake: settings[Display.keepAwake],
             hourCycle: HourCycleSetting(rawValue: settings[Display.hourCycle]) ?? .automatic,
@@ -331,11 +430,13 @@ public struct HubPreferences: Equatable, Sendable {
             ),
             homeShowsWidgets: settings[UISettings.HomeScreen.showsWidgets],
             homeWallpaper: HomeWallpaper(rawValue: settings[UISettings.HomeScreen.wallpaper]) ?? .face,
+            weatherSource: WeatherLocationSource(rawValue: settings[UISettings.Weather.location]) ?? .current,
             weatherLocation: WeatherLocation(
                 name: settings[UISettings.Weather.locationName],
                 latitude: settings[UISettings.Weather.latitude],
                 longitude: settings[UISettings.Weather.longitude]
             ),
+            idleReturn: TimeInterval(settings[Display.idleReturn]),
             setupMode: settings[GeneralSettings.setupMode],
             deviceRole: settings[GeneralSettings.deviceRole]
         )

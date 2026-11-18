@@ -19,20 +19,20 @@ import Testing
         #expect(HomeScreenItem(id: "widget.teleporter") == nil)
         #expect(HomeScreenItem(id: "gadget.timers") == nil)
         #expect(HomeScreenItem(id: "timers") == nil)
-        #expect(HomeScreenItem.app(.messages).access == .personal)
+        #expect(HomeScreenItem.app(.projectedApps).access == .personal)
         #expect(HomeScreenItem.widget(.timers).access == .guest)
         #expect(HomeScreenItem.app(.clock).span == 1 && HomeScreenItem.widget(.clock).span == 2)
     }
 
     @Test func defaultLayout_whenGuest_thenHasNoMemberOrPersonalItems() {
         let guest = HomeScreenLayout.defaultLayout(for: .guest)
-        #expect(!guest.items.contains(.app(.messages)))
-        #expect(!guest.items.contains(.widget(.messages)))
+        #expect(!guest.items.contains(.app(.projectedApps)))
+        #expect(!guest.items.contains(.widget(.nextAlarm)))
         #expect(!guest.items.contains(.app(.alarms)))
         #expect(guest.items.contains(.app(.timers)))
         #expect(guest.items.contains(.app(.people)))
         let member = HomeScreenLayout.defaultLayout(for: owner)
-        #expect(member.items.contains(.app(.messages)))
+        #expect(member.items.contains(.app(.projectedApps)))
         #expect(Set(HubApp.allCases.map(HomeScreenItem.app)).isSubset(of: Set(member.items)))
         #expect(member.lastFace == nil)
     }
@@ -82,10 +82,23 @@ import Testing
     }
 
     @Test func codec_whenGuestFileHoldsPersonalItems_thenStripsThem() {
-        let data = Data(#"{"version":1,"payload":{"items":["app.messages","app.music"]}}"#.utf8)
+        let data = Data(#"{"version":1,"payload":{"items":["app.projectedApps","app.music"]}}"#.utf8)
         let layout = LayoutCodec.decode(data, owner: .guest)
-        #expect(!layout.items.contains(.app(.messages)))
+        #expect(!layout.items.contains(.app(.projectedApps)))
         #expect(layout.items.first == .app(.music))
+    }
+
+    @Test func codec_whenFileHoldsAnAppAndWidgetThatWereRemoved_thenDropsThemAndKeepsTheRest() {
+        // Messages was an app and a widget in earlier versions.
+        let data = Data(#"{"version":1,"payload":{"items":["app.messages","app.music","widget.messages","widget.timers","app.timers"],"lastFace":"flow"}}"#.utf8)
+        let layout = LayoutCodec.decode(data, owner: owner)
+        #expect(Array(layout.items.prefix(3)) == [.app(.music), .widget(.timers), .app(.timers)])
+        #expect(layout.lastFace == .flow)
+        #expect(!layout.items.map(\.id).contains { $0.hasSuffix(".messages") })
+        #expect(HomeScreenItem(id: "app.messages") == nil && HomeScreenItem(id: "widget.messages") == nil)
+        // Saving it again writes only what this version knows.
+        let saved = try? LayoutCodec.encode(layout)
+        #expect(saved.map { String(decoding: $0, as: UTF8.self).contains("messages") } == false)
     }
 
     @Test func fileStore_whenSavedPerOwner_thenEachOwnerReadsTheirOwn() throws {
@@ -95,7 +108,7 @@ import Testing
         #expect(store.layout(for: owner) == .defaultLayout(for: owner))
         var mine = store.layout(for: owner)
         mine.lastFace = .fade
-        mine.move(itemID: "app.settings", onto: "app.messages")
+        mine.move(itemID: "app.settings", onto: "app.projectedApps")
         try store.save(mine, for: owner)
         var guest = store.layout(for: .guest)
         guest.lastFace = .rainbow
@@ -157,17 +170,17 @@ import Testing
         #expect(store.layout(for: owner).lastFace == .calendar)
         try store.removeLayout(for: owner)
         #expect(store.layout(for: owner).lastFace == nil)
-        let seeded = InMemoryLayoutStore(layouts: [.guest: HomeScreenLayout(items: [.app(.messages), .app(.clock)])])
+        let seeded = InMemoryLayoutStore(layouts: [.guest: HomeScreenLayout(items: [.app(.projectedApps), .app(.clock)])])
         #expect(seeded.layout(for: .guest).items.first == .app(.clock))
     }
 }
 
 @Suite struct HomeGridPackerTests {
     @Test func pack_whenWidgetsAndIcons_thenIconsFillBesideWidgets() {
-        let items: [HomeScreenItem] = [.app(.messages), .app(.beam), .widget(.weather), .app(.home), .app(.music), .widget(.timers), .app(.timers)]
+        let items: [HomeScreenItem] = [.app(.photos), .app(.beam), .widget(.weather), .app(.home), .app(.music), .widget(.timers), .app(.timers)]
         let result = HomeGridPacker.pack(items, columns: 4)
         let positions = Dictionary(uniqueKeysWithValues: result.placements.map { ($0.id, [$0.column, $0.row, $0.span]) })
-        #expect(positions["app.messages"] == [0, 0, 1])
+        #expect(positions["app.photos"] == [0, 0, 1])
         #expect(positions["app.beam"] == [1, 0, 1])
         #expect(positions["widget.weather"] == [2, 0, 2])
         #expect(positions["app.home"] == [0, 1, 1])

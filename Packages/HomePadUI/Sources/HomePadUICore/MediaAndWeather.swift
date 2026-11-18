@@ -63,6 +63,8 @@ public struct WeatherSnapshot: Equatable, Sendable {
     public var humidity: Double?
     public var windKilometersPerHour: Double?
     public var sunset: Date?
+    /// 0...1 for today, nil when the source does not say.
+    public var precipitationChance: Double?
     public var asOf: Date
 
     public init(
@@ -75,6 +77,7 @@ public struct WeatherSnapshot: Equatable, Sendable {
         humidity: Double? = nil,
         windKilometersPerHour: Double? = nil,
         sunset: Date? = nil,
+        precipitationChance: Double? = nil,
         asOf: Date
     ) {
         self.locationName = locationName
@@ -86,6 +89,7 @@ public struct WeatherSnapshot: Equatable, Sendable {
         self.humidity = humidity
         self.windKilometersPerHour = windKilometersPerHour
         self.sunset = sunset
+        self.precipitationChance = precipitationChance.map { min(max($0, 0), 1) }
         self.asOf = asOf
     }
 
@@ -94,6 +98,35 @@ public struct WeatherSnapshot: Equatable, Sendable {
 
     public func isStale(at date: Date) -> Bool {
         date.timeIntervalSince(asOf) > Self.staleAfter
+    }
+}
+
+/// What the drawn sky shows. Chosen from the condition's symbol, which every source provides.
+public enum SkyKind: String, CaseIterable, Sendable {
+    case clear, cloudy, rain, snow, storm, fog, night
+
+    public init(symbolName: String?) {
+        let name = symbolName ?? ""
+        if name.contains("bolt") {
+            self = .storm
+        } else if name.contains("snow") || name.contains("sleet") || name.contains("hail") {
+            self = .snow
+        } else if name.contains("rain") || name.contains("drizzle") {
+            self = .rain
+        } else if name.contains("fog") || name.contains("haze") || name.contains("smoke") {
+            self = .fog
+        } else if name.contains("moon") {
+            self = .night
+        } else if name.contains("cloud") {
+            self = .cloudy
+        } else {
+            self = .clear
+        }
+    }
+
+    /// Whether drops or flakes fall across the sky.
+    public var hasPrecipitation: Bool {
+        self == .rain || self == .snow || self == .storm
     }
 }
 

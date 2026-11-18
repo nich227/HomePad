@@ -55,6 +55,8 @@ struct AnalogDial: View {
     enum Markers {
         case numerals
         case hourTicks
+        /// Sixty ticks and no numerals.
+        case minuteTicks
     }
 
     let date: Date
@@ -74,6 +76,8 @@ struct AnalogDial: View {
             switch markers {
             case .hourTicks:
                 ClockDrawing.ticks(context, center: center, radius: radius, hoursOnly: true, color: inkColor, width: radius * 0.035)
+            case .minuteTicks:
+                ClockDrawing.ticks(context, center: center, radius: radius, hoursOnly: false, color: inkColor, width: radius * 0.022)
             case .numerals:
                 ClockDrawing.ticks(context, center: center, radius: radius, hoursOnly: false, color: inkColor.opacity(0.7), width: radius * 0.018)
                 for hour in 1...12 {

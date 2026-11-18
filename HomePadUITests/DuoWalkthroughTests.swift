@@ -12,6 +12,8 @@ final class DuoWalkthroughTests: WalkthroughCase {
         static let outerOnItsSide = "678x466"
     }
 
+    override var usesEdgeSwipes: Bool { false }
+
     override func setUp() async throws {
         try await super.setUp()
         try XCTSkipUnless(isDuoStandIn, "The folding iPhone sizes are framed on the small iPad.")
@@ -87,7 +89,7 @@ final class DuoWalkthroughTests: WalkthroughCase {
 
     // MARK: Hub
 
-    func testB_whenHubOnEachDisplay_thenCanvasScalesAndStatusFits() throws {
+    func testB_whenHubOnEachDisplay_thenTheHubFillsEachAndTheStatusFits() throws {
         let member = [Hook.sample, Hook.audience("recognized"), Hook.proximity("near")]
 
         hub(member, Hook.viewport(Size.inner))
@@ -109,10 +111,28 @@ final class DuoWalkthroughTests: WalkthroughCase {
         }
         app.buttons["hub.profile"].firstMatch.tap()
         pause(1.5)
-        snapshot("h23-outer-hub-profile-switcher")
+        snapshot("h23-outer-hub-control-center")
+        XCTAssertTrue(app.buttons["control.night"].exists, "the control center did not open on the outer display")
 
-        hub(member, Hook.viewport(Size.inner), Hook.fill)
-        snapshot("h50-inner-hub-fill-layout")
+        hub(member, Hook.viewport(Size.outer), Hook.night)
+        snapshot("h24-outer-hub-face-night")
+
+        hub(member, Hook.viewport(Size.inner), Hook.square)
+        snapshot("h50-inner-hub-square-canvas")
+
+        // The Home Modular face and its dial on the inner display.
+        hub(member, Hook.viewport(Size.inner))
+        for _ in 0..<4 {
+            app.swipeLeft()
+            pause(1.2)
+        }
+        snapshot("h51-inner-hub-home-modular")
+        let thermostat = app.descendants(matching: .any)["home.thermostat"].firstMatch
+        if thermostat.exists {
+            thermostat.tap()
+            pause(1.5)
+            snapshot("h52-inner-hub-thermostat-dial")
+        }
 
         // Partly folded, held upright: the fold runs across, the face above and the rest below.
         hub(member, Hook.viewport(Size.inner), Hook.fold)
@@ -160,9 +180,7 @@ final class DuoWalkthroughTests: WalkthroughCase {
     }
 
     private func hub(_ member: [[String: String]], _ hooks: [String: String]...) {
-        app.terminate()
-        app.launchEnvironment = (member + hooks).reduce(into: [:]) { $0.merge($1) { _, new in new } }
-        app.launch()
+        launch(member + hooks)
         XCTAssertTrue(app.buttons["hub.showHomeScreen"].waitForExistence(timeout: 60), "the hub did not appear")
         allowSystemPrompts(wait: 1)
         pause(2)

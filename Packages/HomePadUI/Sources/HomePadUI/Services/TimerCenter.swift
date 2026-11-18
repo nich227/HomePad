@@ -55,6 +55,14 @@ public final class TimerCenter {
     /// Timers that finished and have not been dismissed, oldest first.
     public private(set) var ringing: [HubTimer] = []
     public private(set) var lastError: TimerEngineError?
+    /// While true a finished timer still shows, and makes no sound. Do Not Disturb sets it.
+    public var isSilenced = false {
+        didSet {
+            if isSilenced {
+                sound.stopAlert()
+            }
+        }
+    }
 
     @ObservationIgnored private let store: any SnapshotStore
     @ObservationIgnored private let sound: any AlertSounding
@@ -161,7 +169,9 @@ public final class TimerCenter {
             if !finished.isEmpty {
                 ringing += finished
                 persist()
-                sound.startAlert()
+                if !isSilenced {
+                    sound.startAlert()
+                }
             }
         }
         return engine.nextCompletionDate != nil
@@ -175,6 +185,14 @@ public final class AlarmCenter {
     public private(set) var book: AlarmBook
     public private(set) var ringing: HubAlarm?
     public private(set) var lastError: AlarmError?
+    /// While true a due alarm still shows, and makes no sound. Do Not Disturb sets it.
+    public var isSilenced = false {
+        didSet {
+            if isSilenced {
+                sound.stopAlert()
+            }
+        }
+    }
 
     @ObservationIgnored private let store: any SnapshotStore
     @ObservationIgnored private let sound: any AlertSounding
@@ -249,7 +267,9 @@ public final class AlarmCenter {
 
     private func ring(_ alarm: HubAlarm) {
         ringing = alarm
-        sound.startAlert()
+        if !isSilenced {
+            sound.startAlert()
+        }
     }
 
     private func mutate(_ change: (inout AlarmBook) throws(AlarmError) -> Void) {

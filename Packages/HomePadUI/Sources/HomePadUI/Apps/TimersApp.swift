@@ -71,7 +71,8 @@ struct TimersApp: View {
     /// running timer captions its length.
     private var newTimer: some View {
         let gap = metrics.pt(2.2)
-        let cell = (metrics.side - metrics.pt(4) * 2 - metrics.pt(1) * 2 - gap * 2) / 3
+        let columns = metrics.columns(3)
+        let cell = metrics.cell(count: columns, padding: metrics.pt(5), gap: gap)
         return VStack(alignment: .leading, spacing: metrics.pt(2.4)) {
             TextField("Name (optional)", text: $name)
                 .font(.system(size: metrics.text(3.4)))
@@ -82,7 +83,7 @@ struct TimersApp: View {
                 .background(Capsule().fill(Color.hubTileFill))
                 .accessibilityLabel("Timer name")
                 .accessibilityIdentifier("timers.name")
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: columns), spacing: gap) {
                 ForEach(Self.presetMinutes, id: \.self) { minutes in
                     Button {
                         if let timer = environment.timers.add(name: name, duration: TimeInterval(minutes * 60)) {

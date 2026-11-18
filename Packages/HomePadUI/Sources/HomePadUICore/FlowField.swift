@@ -46,7 +46,7 @@ public enum FlowField {
     /// still image that only leans toward the viewer.
     public static func parameters(position: FacePosition?, time: TimeInterval, proximity: Proximity, reduceMotion: Bool) -> FlowParameters {
         let focus = position ?? .center
-        let near = proximity == .near
+        let near = proximity != .far
         return FlowParameters(
             focus: FlowPoint(x: focus.x, y: focus.y),
             phase: reduceMotion ? 0 : (time.truncatingRemainder(dividingBy: cycleSeconds) / cycleSeconds) * 2 * .pi,

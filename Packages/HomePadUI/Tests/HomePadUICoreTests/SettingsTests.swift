@@ -70,6 +70,8 @@ import Testing
         defaults.set(false, forKey: "ui.home.showsWidgets")
         defaults.set("black", forKey: "ui.home.wallpaper")
         defaults.set("Cupertino", forKey: "ui.weather.locationName")
+        defaults.set("custom", forKey: "ui.weather.location")
+        defaults.set(0, forKey: "ui.display.idleReturn")
         defaults.set("37.33", forKey: "ui.weather.latitude")
         defaults.set(" -122.03 ", forKey: "ui.weather.longitude")
         defaults.set(false, forKey: "general.setupMode")
@@ -97,6 +99,8 @@ import Testing
         #expect(preferences.night == NightSchedule(isEnabled: true, startHour: 21, endHour: 6, followsRoomLight: true))
         #expect(!preferences.homeShowsWidgets)
         #expect(preferences.homeWallpaper == .black)
+        #expect(preferences.weatherSource == .custom)
+        #expect(preferences.idleReturn == nil)
         #expect(preferences.weatherLocation?.name == "Cupertino")
         #expect(preferences.weatherLocation?.latitude == 37.33)
         #expect(preferences.weatherLocation?.longitude == -122.03)
@@ -107,11 +111,37 @@ import Testing
     @Test func preferences_whenStoredStringsAreUnknown_thenFallBackToDefaults() {
         let (settings, defaults, suite) = makeSettings()
         defer { defaults.removePersistentDomain(forName: suite) }
-        for key in ["ui.face.digital.color", "ui.face.digital.font", "ui.face.analog.numerals", "ui.face.analog.color", "ui.face.fade.color", "ui.face.photos.source", "ui.face.photos.layout", "ui.display.canvas", "ui.display.hourCycle", "ui.display.temperatureUnit", "ui.home.wallpaper"] {
+        for key in ["ui.face.digital.color", "ui.face.digital.font", "ui.face.analog.numerals", "ui.face.analog.color", "ui.face.fade.color", "ui.face.photos.source", "ui.face.photos.layout", "ui.display.canvas", "ui.display.hourCycle", "ui.display.temperatureUnit", "ui.home.wallpaper", "ui.weather.location"] {
             defaults.set("???", forKey: key)
         }
         settings.refresh()
         #expect(HubPreferences(settings: settings) == HubPreferences())
+    }
+
+    @Test func preferences_whenDefault_thenFillTheScreenAndReturnToFaceAfterTwoMinutes() {
+        let preferences = HubPreferences()
+        #expect(preferences.canvas == .fill)
+        #expect(preferences.idleReturn == 120)
+        #expect(preferences.weatherSource == .current)
+        #expect(HubPreferences(idleReturn: 0).idleReturn == nil)
+        #expect(HubPreferences(idleReturn: nil).idleReturn == nil)
+        #expect(UISettings.Display.canvas.defaultValue == "fill")
+        #expect(UISettings.Faces.title(for: .memories) == "Memories")
+    }
+
+    @Test func weatherPlace_whenResolved_thenThePlaceOrWhyThereIsNone() {
+        let here = WeatherLocation(name: "Oslo", latitude: 59.9, longitude: 10.7)
+        let typed = WeatherLocation(name: "Cupertino", latitude: 37.33, longitude: -122.03)
+        #expect(WeatherPlace.resolve(source: .custom, custom: typed, permission: .denied, fix: here) == .ready(typed))
+        #expect(WeatherPlace.resolve(source: .custom, custom: nil, permission: .allowed, fix: here) == .unavailable(.customLocationMissing))
+        #expect(WeatherPlace.resolve(source: .current, custom: typed, permission: .notDetermined, fix: nil) == .unavailable(.needsLocationPermission))
+        #expect(WeatherPlace.resolve(source: .current, custom: typed, permission: .denied, fix: here) == .unavailable(.locationDenied))
+        #expect(WeatherPlace.resolve(source: .current, custom: typed, permission: .allowed, fix: nil) == .unavailable(.locating))
+        #expect(WeatherPlace.resolve(source: .current, custom: typed, permission: .allowed, fix: here) == .ready(here))
+        #expect(WeatherProblem.locationDenied.isFixedInSettings && WeatherProblem.customLocationMissing.isFixedInSettings)
+        #expect(!WeatherProblem.locating.isFixedInSettings && !WeatherProblem.serviceUnavailable.isFixedInSettings)
+        #expect(!WeatherProblem.needsLocationPermission.isFixedInSettings)
+        #expect(WeatherLocationSource.allCases == [.current, .custom])
     }
 
     @Test func weatherLocation_whenCoordinatesMissingOrOffGlobe_thenNil() {

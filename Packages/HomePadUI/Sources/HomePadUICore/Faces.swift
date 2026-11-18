@@ -5,6 +5,7 @@ import HomePadCore
 public enum FaceKind: String, CaseIterable, Codable, Sendable, Identifiable {
     case modular
     case photos
+    case memories
     case weather
     case homeModular
     case calendar
@@ -87,8 +88,11 @@ public enum PhotosLayout: String, CaseIterable, Sendable {
     case corner
 }
 
+/// How the hub uses a screen that is not square.
 public enum CanvasMode: String, CaseIterable, Sendable {
+    /// A square centered on black, the shape of HomeView's own display.
     case square
+    /// The whole screen. Every face and app is laid out for the space it has.
     case fill
 }
 
@@ -162,6 +166,50 @@ public enum FacePager {
         guard let index = faces.firstIndex(of: current) else { return faces[0] }
         let count = faces.count
         return faces[((index + step) % count + count) % count]
+    }
+}
+
+/// The Memories face: the chosen photos one after another, each drifting slowly while it shows.
+public enum MemoriesSlideshow {
+    /// How long one photo stays up.
+    public static let secondsPerPhoto: TimeInterval = 12
+    /// The part of that time spent fading to the next photo.
+    public static let fadeSeconds: TimeInterval = 1.5
+
+    public struct Frame: Equatable, Sendable {
+        /// The photo to show.
+        public let index: Int
+        /// 0...1 through this photo's time on screen.
+        public let progress: Double
+        /// Scale of the photo, a little over 1 so it can drift without showing an edge.
+        public let scale: Double
+        /// Offset of the photo as a fraction of the screen, in the range -0.03...0.03.
+        public let offsetX: Double
+        public let offsetY: Double
+        /// 1 while the photo is fully shown, falling to 0 as the next one fades in.
+        public let opacity: Double
+    }
+
+    /// Deterministic, so every redraw agrees and a still frame can be tested. Nil with no photos.
+    public static func frame(count: Int, at date: Date, reduceMotion: Bool = false) -> Frame? {
+        guard count > 0 else { return nil }
+        let time = date.timeIntervalSinceReferenceDate
+        let slot = (time / secondsPerPhoto).rounded(.down)
+        let progress = time / secondsPerPhoto - slot
+        let index = ((Int(slot) % count) + count) % count
+        let remaining = (1 - progress) * secondsPerPhoto
+        let opacity = count > 1 ? min(1, remaining / fadeSeconds) : 1
+        guard !reduceMotion else {
+            return Frame(index: index, progress: progress, scale: 1, offsetX: 0, offsetY: 0, opacity: opacity)
+        }
+        // Odd slots zoom out and even slots zoom in, drifting toward a different corner each time.
+        let zoomsIn = Int(slot) % 2 == 0
+        let eased = progress * progress * (3 - 2 * progress)
+        let scale = zoomsIn ? 1.06 + 0.08 * eased : 1.14 - 0.08 * eased
+        let directions: [(Double, Double)] = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
+        let direction = directions[((Int(slot) % 4) + 4) % 4]
+        let travel = 0.03 * (eased * 2 - 1)
+        return Frame(index: index, progress: progress, scale: scale, offsetX: direction.0 * travel, offsetY: direction.1 * travel, opacity: opacity)
     }
 }
 

@@ -2,9 +2,10 @@ import Foundation
 import HomePadCore
 import HomePadUICore
 import Observation
+import SwiftUI
 
 /// View state of the hub shell that is not navigation: whose layout is showing, the face in
-/// view, and night mode.
+/// view, Night Mode, Do Not Disturb, and the live pill.
 @MainActor
 @Observable
 final class HubModel {
@@ -13,16 +14,28 @@ final class HubModel {
     /// The face the pager is resting on. Bound to the pager's scroll position.
     var face: FaceKind?
     private(set) var night: NightAppearance = .day
-    var showsSwitcher = false
+    /// Do Not Disturb, while it is on. In memory only.
+    private(set) var quiet: QuietTime?
+    /// The screen brightness set from the control center, 0...1.
+    private(set) var brightness: Double = 1
     var helloDismissed = false
-    var liveCameraID: String?
+    /// The live pill is open as a card.
+    var isPillExpanded = false
+    /// How wide the status in the top trailing corner is, so the pill beside it can stay clear.
+    var statusWidth: CGFloat = 0
+    /// Where on the canvas the open app's icon is, so the app grows from it and shrinks back.
+    var appAnchor = UnitPoint.center
+    /// The member the hub just recognized, shown in the pill for a moment.
+    private(set) var recognizedName: String?
 
     @ObservationIgnored private let layoutStore: any LayoutStore
     @ObservationIgnored let screen = ScreenController()
-    @ObservationIgnored private var wakeUntil: Date?
+    /// Night Mode switched by hand. In memory only, and gone at the next start or end hour.
+    @ObservationIgnored private var nightOverride: NightOverride?
     @ObservationIgnored private(set) var lastInteraction = Date()
     @ObservationIgnored private var lastSummary: HubStatusSummary?
     @ObservationIgnored private var welcomeFinished = false
+    @ObservationIgnored private var recognizedUntil: Date?
 
     init(layoutStore: any LayoutStore) {
         self.layoutStore = layoutStore
@@ -60,10 +73,9 @@ final class HubModel {
         try? layoutStore.save(layout, for: owner)
     }
 
-    /// Any touch counts as someone using the hub, and wakes it for a moment at night.
+    /// Any touch counts as someone using the hub.
     func touch(at date: Date = Date()) {
         lastInteraction = date
-        wakeUntil = NightModePolicy.wakeDeadline(from: date)
     }
 
     /// Returns true the first time it is called, so the owner is told exactly once.
@@ -73,11 +85,13 @@ final class HubModel {
         return true
     }
 
-    /// `forced` shows the night clock regardless of the schedule. Only UI tests set it.
+    /// `forced` shows Night Mode regardless of the schedule. Only UI tests set it, and the
+    /// control center's switch still turns it off.
     func updateNight(schedule: NightSchedule, ambient: AmbientLightHint?, now: Date, calendar: Calendar, forced: Bool = false) {
-        let appearance: NightAppearance = forced
-            ? .night(brightness: NightModePolicy.dimBrightness)
-            : NightModePolicy.appearance(schedule: schedule, now: now, calendar: calendar, ambient: ambient, wakeUntil: wakeUntil)
+        var appearance = NightModePolicy.appearance(schedule: schedule, now: now, calendar: calendar, ambient: ambient, override: nightOverride)
+        if forced, NightModePolicy.active(nightOverride, now: now) == nil {
+            appearance = .night(brightness: NightModePolicy.dimBrightness)
+        }
         if appearance != night {
             night = appearance
         }
@@ -86,6 +100,53 @@ final class HubModel {
         } else {
             screen.setNightBrightness(nil)
         }
+        if let quiet, !quiet.isActive(at: now) {
+            self.quiet = nil
+        }
+        if let recognizedUntil, recognizedUntil <= now {
+            self.recognizedUntil = nil
+            recognizedName = nil
+        }
+    }
+
+    /// The control center's switch: the opposite of what is showing, until the next start or
+    /// end hour.
+    func toggleNight(schedule: NightSchedule, ambient: AmbientLightHint?, now: Date, calendar: Calendar) {
+        nightOverride = NightModePolicy.toggled(from: night, schedule: schedule, now: now, calendar: calendar)
+        updateNight(schedule: schedule, ambient: ambient, now: now, calendar: calendar)
+    }
+
+    /// Night Mode asked for by name from outside the shell. The same as the switch when it is
+    /// a change, and nothing when it is not.
+    func setNight(_ isNight: Bool, schedule: NightSchedule, ambient: AmbientLightHint?, now: Date, calendar: Calendar, forced: Bool) {
+        nightOverride = NightModePolicy.override(setting: isNight, from: night, existing: nightOverride, schedule: schedule, now: now, calendar: calendar)
+        updateNight(schedule: schedule, ambient: ambient, now: now, calendar: calendar, forced: forced)
+    }
+
+    func toggleQuiet(schedule: NightSchedule, now: Date, calendar: Calendar) {
+        quiet = QuietTime.toggled(from: quiet, schedule: schedule, now: now, calendar: calendar)
+    }
+
+    func isQuiet(at date: Date = Date()) -> Bool {
+        quiet?.isActive(at: date) ?? false
+    }
+
+    /// Reads the screen's brightness, so the control center's slider starts where the screen is.
+    func readBrightness() {
+        if let current = screen.brightness {
+            brightness = current
+        }
+    }
+
+    func setBrightness(_ value: Double) {
+        brightness = min(max(value, 0), 1)
+        screen.setBrightness(brightness)
+    }
+
+    /// Shows the member's avatar and name in the pill for a moment.
+    func confirmRecognition(of name: String, at date: Date = Date()) {
+        recognizedName = name
+        recognizedUntil = date.addingTimeInterval(LivePill.recognitionSeconds)
     }
 
     /// Returns the summary when it differs from the last one handed out, ignoring its timestamp,

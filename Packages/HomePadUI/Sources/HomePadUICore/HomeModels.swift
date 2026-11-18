@@ -24,15 +24,27 @@ public struct HomeAccessory: Identifiable, Equatable, Sendable {
     public var isOn: Bool
     /// 0...100, nil when the accessory cannot dim.
     public var brightness: Int?
+    /// In mireds, nil when the accessory cannot change its white.
+    public var colorTemperature: Int?
     public var isReachable: Bool
 
-    public init(id: String, name: String, roomName: String, kind: HomeAccessoryKind, isOn: Bool, brightness: Int? = nil, isReachable: Bool = true) {
+    public init(
+        id: String,
+        name: String,
+        roomName: String,
+        kind: HomeAccessoryKind,
+        isOn: Bool,
+        brightness: Int? = nil,
+        colorTemperature: Int? = nil,
+        isReachable: Bool = true
+    ) {
         self.id = id
         self.name = name
         self.roomName = roomName
         self.kind = kind
         self.isOn = isOn
         self.brightness = brightness
+        self.colorTemperature = colorTemperature
         self.isReachable = isReachable
     }
 }
@@ -57,19 +69,26 @@ public struct HomeScene: Identifiable, Equatable, Sendable {
     }
 }
 
+public enum ThermostatMode: Int, CaseIterable, Sendable {
+    case off = 0, heat, cool, auto
+}
+
 public struct HomeThermostat: Identifiable, Equatable, Sendable {
     public let id: String
     public var name: String
     public var roomName: String
     public var currentCelsius: Double
     public var targetCelsius: Double
+    /// Nil when the thermostat does not report one.
+    public var mode: ThermostatMode?
 
-    public init(id: String, name: String, roomName: String, currentCelsius: Double, targetCelsius: Double) {
+    public init(id: String, name: String, roomName: String, currentCelsius: Double, targetCelsius: Double, mode: ThermostatMode? = nil) {
         self.id = id
         self.name = name
         self.roomName = roomName
         self.currentCelsius = currentCelsius
         self.targetCelsius = targetCelsius
+        self.mode = mode
     }
 }
 
@@ -77,11 +96,14 @@ public struct HomeCamera: Identifiable, Equatable, Sendable {
     public let id: String
     public var name: String
     public var roomName: String
+    /// True only when the camera reports a speaker and a microphone it lets an app use.
+    public var supportsTwoWayAudio: Bool
 
-    public init(id: String, name: String, roomName: String) {
+    public init(id: String, name: String, roomName: String, supportsTwoWayAudio: Bool = false) {
         self.id = id
         self.name = name
         self.roomName = roomName
+        self.supportsTwoWayAudio = supportsTwoWayAudio
     }
 }
 
@@ -110,10 +132,23 @@ public struct HomeSnapshot: Equatable, Sendable {
 
     public static let empty = HomeSnapshot()
 
-    /// Room names in first-seen order, for the room sections of the Home app.
+    /// Room names in first-seen order, for the room bar of the Home app.
     public var roomNames: [String] {
         var seen = Set<String>()
-        return accessories.map(\.roomName).filter { seen.insert($0).inserted }
+        let names = accessories.map(\.roomName) + thermostats.map(\.roomName) + cameras.map(\.roomName)
+        return names.filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /// The tiles of the Home app for a room, or for the whole home when `room` is nil: the
+    /// cameras, then the scenes (which belong to no room), then the accessories.
+    public func tiles(inRoom room: String?) -> [HomeTile] {
+        let inRoom: (String) -> Bool = { room == nil || $0 == room }
+        var tiles = cameras.filter { inRoom($0.roomName) }.map(HomeTile.camera)
+        if room == nil {
+            tiles += scenes.map(HomeTile.scene)
+        }
+        tiles += accessories.filter { inRoom($0.roomName) }.map(HomeTile.accessory)
+        return tiles
     }
 
     public func accessories(inRoom room: String) -> [HomeAccessory] {

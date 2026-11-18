@@ -22,7 +22,7 @@ struct AppHostView: View {
             case .recipes: RecipesApp(onClose: onClose)
             case .weather: WeatherApp(onClose: onClose)
             case .photos: PhotosApp(onClose: onClose)
-            case .beam, .messages, .projectedApps, .people, .pairing, .settings:
+            case .beam, .projectedApps, .people, .pairing, .settings, .intercom, .calendar:
                 SlotScreen(app: app, onClose: onClose) {
                     slots.view(for: app) ?? AnyView(EmptyView())
                 }
@@ -90,7 +90,9 @@ struct AppScreen<Content: View>: View {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(metrics.pt(4))
+        .padding(.horizontal, metrics.pt(4))
+        .padding(.top, max(metrics.pt(4), metrics.topObstruction))
+        .padding(.bottom, metrics.bottomBar)
         .background(background)
     }
 }
@@ -135,33 +137,21 @@ struct ClockApp: View {
     }
 }
 
+/// The Weather face, always with its details, and a way out. When there is no weather the face
+/// says why and offers Settings where that is the fix.
 struct WeatherApp: View {
     let onClose: () -> Void
     @Environment(\.hubMetrics) private var metrics
-    @Environment(HubEnvironment.self) private var environment
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            if environment.weather.snapshot == nil {
-                WeatherSky()
-                HubEmptyState(
-                    symbol: "cloud.sun.fill",
-                    title: "Weather Is Not Set Up",
-                    message: "Enter the hub's city and coordinates in Settings to see the weather here and on your faces."
-                ) {
-                    HubSettingsButton()
-                }
-                .symbolRenderingMode(.multicolor)
-            } else {
-                TimelineView(.periodic(from: .startOfCurrentSecond, by: 30)) { timeline in
-                    WeatherFace(date: timeline.date)
-                        .environment(\.faceDensity, .detailed)
-                        .padding(.top, metrics.pt(11))
-                        .background(WeatherSky())
-                }
+            TimelineView(.periodic(from: .startOfCurrentSecond, by: 30)) { timeline in
+                WeatherFace(date: timeline.date)
+                    .environment(\.faceDensity, .detailed)
             }
             GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
-                .padding(metrics.pt(4))
+                .padding(.leading, metrics.margin)
+                .padding(.top, metrics.topEdge)
         }
     }
 }

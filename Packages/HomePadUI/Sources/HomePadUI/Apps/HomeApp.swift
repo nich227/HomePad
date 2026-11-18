@@ -2,22 +2,28 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// The home on a three-column grid of tiles: a clock, the thermostat, cameras, scenes, and
-/// accessories. A lit tile means the accessory is on.
+/// The home, room by room: a bar of rooms across the top, the room's thermostat as a large
+/// tile, and its cameras, scenes, and accessories as glass tiles over the wallpaper. A tap
+/// switches a tile, a held press opens its slider, and the thermostat opens its dial.
 struct HomeApp: View {
     let onClose: () -> Void
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubMayRunScenes) private var mayRunScenes
+    @Environment(\.hubMotion) private var motion
     @Environment(HubEnvironment.self) private var environment
-    @State private var liveCameraID: String?
+    /// Nil shows the whole home.
+    @State private var room: String?
+    @Namespace private var roomGlass
 
     var body: some View {
         let home = environment.home
         ZStack {
-            AppScreen(title: "Home", onClose: onClose) {
+            HubWallpaper()
+            VStack(spacing: metrics.gutter) {
+                header(home.snapshot)
                 switch home.access {
                 case .ready:
-                    grid(home.snapshot)
+                    content(home.snapshot)
                 case .denied:
                     HubEmptyState(
                         symbol: "house.fill",
@@ -43,98 +49,118 @@ struct HomeApp: View {
                     )
                 }
             }
-            if let liveCameraID {
-                ZStack(alignment: .topLeading) {
-                    Color.black
-                    home.cameraView(id: liveCameraID, live: true)
-                    GlassCircleButton(symbol: "xmark", label: "Close Camera") { self.liveCameraID = nil }
-                        .padding(metrics.pt(4))
-                }
-                .transition(.opacity)
-            }
+            .padding(.horizontal, metrics.margin)
+            .padding(.top, metrics.topEdge)
+            .padding(.bottom, metrics.bottomBar)
         }
+        .environment(\.faceDensity, .detailed)
         .startsOnFirstUse { home.start() }
-        .animation(.smooth(duration: 0.3), value: liveCameraID)
+        .animation(motion.spring, value: room)
     }
 
-    private func grid(_ snapshot: HomeSnapshot) -> some View {
-        let gap = metrics.pt(2.2)
-        let cell = (metrics.side - metrics.pt(4) * 2 - gap * 2) / 3
-        let tiles: [HomeTile] = snapshot.cameras.map(HomeTile.camera) + snapshot.scenes.map(HomeTile.scene) + snapshot.accessories.map(HomeTile.accessory)
+    /// The close button and the rooms. The rooms scroll sideways only when there are more than
+    /// fit, which is the one place the hub lets a row do that.
+    private func header(_ snapshot: HomeSnapshot) -> some View {
+        HStack(spacing: metrics.gutter) {
+            GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
+            let pills = GlassEffectContainer(spacing: metrics.token(6)) {
+                HStack(spacing: metrics.token(6)) {
+                    roomPill(nil, title: snapshot.homeName.isEmpty ? String(localized: "Home") : snapshot.homeName)
+                    ForEach(snapshot.roomNames, id: \.self) { name in
+                        roomPill(name, title: name)
+                    }
+                }
+            }
+            ViewThatFits(in: .horizontal) {
+                pills
+                ScrollView(.horizontal) { pills }
+                    .scrollIndicators(.hidden)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: metrics.chromeHeight)
+    }
+
+    private func roomPill(_ name: String?, title: String) -> some View {
+        let isSelected = room == name
+        return Button {
+            room = name
+        } label: {
+            Text(title)
+                .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle + 1), weight: .semibold))
+                .foregroundStyle(isSelected ? Color(white: 0.08) : .white)
+                .lineLimit(1)
+                .padding(.horizontal, metrics.token(16))
+                .frame(height: metrics.chromeHeight)
+                .background {
+                    if isSelected {
+                        Capsule().fill(.white)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .hubGlass(in: Capsule(), tint: isSelected ? .white : nil, interactive: true)
+        .hoverEffect(.highlight)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("home.room.\(name ?? "all")")
+    }
+
+    /// On a wide screen the thermostat keeps the leading part and the tiles scroll beside it;
+    /// on a tall one it sits above them.
+    @ViewBuilder
+    private func content(_ snapshot: HomeSnapshot) -> some View {
+        let thermostat = snapshot.thermostats.first { room == nil || $0.roomName == room }
+        let tiles = snapshot.tiles(inRoom: room)
+        if metrics.isLandscape {
+            HStack(alignment: .top, spacing: metrics.gutter) {
+                if let thermostat {
+                    ThermostatTile(thermostat: thermostat)
+                        .frame(width: metrics.width * 0.3)
+                        .transition(.opacity)
+                }
+                grid(tiles, snapshot: snapshot, width: metrics.width - metrics.margin * 2 - (thermostat == nil ? 0 : metrics.width * 0.3 + metrics.gutter))
+            }
+        } else {
+            VStack(spacing: metrics.gutter) {
+                if let thermostat {
+                    ThermostatTile(thermostat: thermostat)
+                        .frame(height: metrics.token(210))
+                        .transition(.opacity)
+                }
+                grid(tiles, snapshot: snapshot, width: metrics.width - metrics.margin * 2)
+            }
+        }
+    }
+
+    private func grid(_ tiles: [HomeTile], snapshot: HomeSnapshot, width: CGFloat) -> some View {
+        let count = max(2, Int((width / metrics.token(112)).rounded(.down)))
+        let cell = (width - metrics.gutter * CGFloat(count - 1)) / CGFloat(count)
         return ScrollView {
-            VStack(spacing: gap) {
-                HStack(spacing: gap) {
-                    TimelineView(.periodic(from: .startOfCurrentSecond, by: 1)) { timeline in
-                        AnalogDial(date: timeline.date, markers: .numerals)
-                    }
-                    .frame(width: cell, height: cell)
-                    if let thermostat = snapshot.thermostats.first {
-                        ThermostatTile(thermostat: thermostat, style: .solid, numberSize: 15)
-                            .frame(height: cell)
-                    } else {
-                        RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous)
-                            .fill(Color.hubTileFill)
-                            .overlay(
-                                VStack(spacing: metrics.pt(1)) {
-                                    Image(systemName: "house.fill").font(.system(size: metrics.pt(9)))
-                                    Text(snapshot.homeName).font(.system(size: metrics.text(3.2), weight: .semibold))
-                                }
-                                .foregroundStyle(.white)
-                            )
-                            .frame(height: cell)
-                            .accessibilityElement(children: .combine)
-                    }
-                }
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {
+            GlassEffectContainer(spacing: metrics.gutter) {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: metrics.gutter), count: count), spacing: metrics.gutter) {
                     ForEach(tiles) { tile in
-                        tileView(tile)
-                            .frame(width: cell, height: cell)
+                        HomeTileView(tile: tile)
+                            .frame(width: cell, height: cell * 0.82)
                     }
                 }
-                if !mayRunScenes, !snapshot.scenes.isEmpty {
-                    Label("Scenes run only for household members the hub recognizes.", systemImage: "lock.fill")
-                        .font(.system(size: metrics.text(2.9), weight: .medium))
-                        .foregroundStyle(Color.hubSecondaryText)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, metrics.pt(1))
-                        .accessibilityIdentifier("home.scenesLocked")
-                }
+            }
+            if tiles.isEmpty {
+                Text("Nothing in this room yet.")
+                    .font(.system(size: metrics.textToken(DesignTokens.tileTitle), weight: .medium))
+                    .foregroundStyle(Color.hubSecondaryText)
+                    .padding(.top, metrics.token(40))
+            }
+            if !mayRunScenes, room == nil, !snapshot.scenes.isEmpty {
+                Label("Scenes run only for household members the hub recognizes.", systemImage: "lock.fill")
+                    .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle), weight: .medium))
+                    .foregroundStyle(Color.hubSecondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, metrics.token(6))
+                    .accessibilityIdentifier("home.scenesLocked")
             }
         }
         .scrollIndicators(.hidden)
-    }
-
-    @ViewBuilder
-    private func tileView(_ tile: HomeTile) -> some View {
-        switch tile {
-        case .camera(let camera):
-            HomeTileView(tile: tile, style: .solid)
-                .allowsHitTesting(false)
-                .overlay {
-                    Button {
-                        liveCameraID = camera.id
-                    } label: {
-                        Color.clear.contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Show \(camera.name) live"))
-                }
-        case .accessory(let accessory) where accessory.brightness != nil:
-            HomeTileView(tile: tile, style: .solid)
-                .contextMenu {
-                    ForEach([100, 75, 50, 25], id: \.self) { level in
-                        Button {
-                            Task { await environment.home.setBrightness(level, accessoryID: accessory.id) }
-                        } label: {
-                            Text(verbatim: "\(level)%")
-                        }
-                    }
-                    Button("Off") {
-                        Task { await environment.home.setBrightness(0, accessoryID: accessory.id) }
-                    }
-                }
-        default:
-            HomeTileView(tile: tile, style: .solid)
-        }
+        .frame(width: width)
     }
 }

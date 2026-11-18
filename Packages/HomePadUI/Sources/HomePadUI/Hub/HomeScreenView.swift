@@ -2,20 +2,19 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// The app view: a greeting, the active profile, and a four-column grid of app icons and
-/// two by two widgets over the blurred face.
+/// The Home Screen: a greeting, a row of the person's widgets, and a grid of app icons that
+/// scrolls up and down, over the blurred face. The grid has four columns, and more where the
+/// screen is wide enough.
 struct HomeScreenView: View {
     let layout: HomeScreenLayout
     let profileCount: Int
-    /// Nil when the status is already shown beside the canvas.
-    let recognitionIndicator: (@MainActor () -> AnyView)?
-    let onOpen: (HubApp) -> Void
+    /// Optional apps that another package is supplying right now.
+    let availableApps: Set<HubApp>
+    /// The app, and where its icon is on the canvas, so the app can grow out of it.
+    let onOpen: (HubApp, UnitPoint) -> Void
     /// Runs the device's biometrics, then opens the app if that unlocked it.
     let onUnlock: (HubApp) -> Void
-    /// False when a button beside the canvas already leads back to the face.
-    let showsFaceButton: Bool
     let onMove: (String, String) -> Void
-    let onProfile: () -> Void
     let onClose: () -> Void
 
     @Environment(\.hubMetrics) private var metrics
@@ -24,41 +23,72 @@ struct HomeScreenView: View {
     @Environment(\.hubShowsDeviceUnlock) private var showsDeviceUnlock
     @Environment(\.calendar) private var calendar
     @Environment(HouseholdSession.self) private var session
-
-    private static let columns = 4
+    /// How far down the grid is scrolled, 0...1, or nil when everything fits.
+    @State private var scrollFraction: Double?
 
     private var visibleItems: [HomeScreenItem] {
         layout.items.filter { item in
-            if case .widget = item, !preferences.homeShowsWidgets { return false }
+            if case .app(let app) = item, !VisibilityPolicy.isListed(app, available: availableApps) { return false }
             return VisibilityPolicy.visibility(for: item.access, context: audience) != .hidden
         }
     }
 
     var body: some View {
-        let margin = metrics.pt(8.5)
-        let gapX = metrics.pt(4.2)
-        let gapY = metrics.pt(2.6)
-        let cell = (metrics.side - margin * 2 - gapX * CGFloat(Self.columns - 1)) / CGFloat(Self.columns)
-        let rowHeight = metrics.pt(14.5) + metrics.text(5.4)
-        let packed = HomeGridPacker.pack(visibleItems, columns: Self.columns)
+        let unit = Double(metrics.side) / 100
+        let margin = metrics.pt(CGFloat(HomeScreenGrid.margin))
+        let gap = metrics.pt(CGFloat(HomeScreenGrid.gap))
+        let columns = HomeScreenGrid.columns(width: Double(metrics.width), unit: unit)
+        let widgetCount = HomeScreenGrid.widgetCount(width: Double(metrics.width), unit: unit)
+        let items = visibleItems
+        let widgets = preferences.homeShowsWidgets ? Array(items.filter { if case .widget = $0 { true } else { false } }.prefix(widgetCount)) : []
+        let apps = items.filter { if case .app = $0 { true } else { false } }
+        let widgetSide = (metrics.width - margin * 2 - gap * CGFloat(max(widgets.count, widgetCount) - 1)) / CGFloat(max(widgets.count, widgetCount))
+        let fade = metrics.token(28)
+        // At the top the grid is gone before it reaches the pill and the status.
+        let topFade = metrics.topBar
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: metrics.pt(5)) {
+            VStack(alignment: .leading, spacing: metrics.pt(4)) {
                 header
                 if VisibilityPolicy.needsSetupHint(profileCount: profileCount, setupMode: preferences.setupMode) {
                     setupNote
                 }
-                HomeGridLayout(packed: packed, columns: Self.columns, cell: cell, rowHeight: rowHeight, gapX: gapX, gapY: gapY) {
-                    ForEach(packed.placements) { placement in
-                        itemView(placement.item)
+                if !widgets.isEmpty {
+                    GlassEffectContainer(spacing: gap) {
+                        HStack(spacing: gap) {
+                            ForEach(widgets) { item in
+                                itemView(item, widgetSide: widgetSide)
+                            }
+                        }
+                    }
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: gap), count: columns), spacing: metrics.pt(3)) {
+                    ForEach(apps) { item in
+                        itemView(item, widgetSide: widgetSide)
                     }
                 }
             }
             .padding(.horizontal, margin)
-            .padding(.top, metrics.pt(9))
-            .padding(.bottom, metrics.pt(12))
+            .padding(.top, metrics.topBar + metrics.pt(1))
+            .padding(.bottom, metrics.bottomBar + metrics.pt(8))
         }
         .scrollIndicators(.hidden)
         .accessibilityIdentifier("hub.homeScreen")
+        // The grid fades out toward the top and bottom edges instead of being cut off.
+        .mask {
+            VStack(spacing: 0) {
+                LinearGradient(stops: [.init(color: .clear, location: 0.45), .init(color: .black, location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: topFade)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: fade)
+            }
+        }
+        .onScrollGeometryChange(for: Double?.self) { geometry in
+            let range = geometry.contentSize.height - geometry.containerSize.height
+            guard range > 1 else { return nil }
+            return min(max((geometry.contentOffset.y + geometry.contentInsets.top) / range, 0), 1)
+        } action: { _, fraction in
+            scrollFraction = fraction
+        }
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top < -metrics.pt(13)
         } action: { _, pulledPastTop in
@@ -66,50 +96,43 @@ struct HomeScreenView: View {
                 onClose()
             }
         }
-        .overlay(alignment: .bottom) {
-            if showsFaceButton {
-                Button(action: onClose) {
-                    Image(systemName: "chevron.compact.down")
-                        .font(.system(size: metrics.pt(5), weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.75))
-                        .frame(width: metrics.pt(16), height: metrics.pt(6))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityLabel("Show Face")
-                .accessibilityIdentifier("hub.showFace")
-                .padding(.bottom, metrics.pt(1.5))
+        .overlay(alignment: .trailing) {
+            if let scrollFraction {
+                pageIndicator(scrollFraction)
             }
         }
     }
 
+    /// A short track on the trailing edge with a thumb that follows the scroll.
+    private func pageIndicator(_ fraction: Double) -> some View {
+        let height = metrics.token(72)
+        let thumb = metrics.token(26)
+        return Capsule()
+            .fill(.white.opacity(0.22))
+            .frame(width: max(metrics.token(5), 4), height: height)
+            .overlay(alignment: .top) {
+                Capsule()
+                    .fill(.white.opacity(0.9))
+                    .frame(height: thumb)
+                    .offset(y: (height - thumb) * CGFloat(fraction))
+            }
+            .padding(.trailing, metrics.token(6))
+            .accessibilityHidden(true)
+    }
+
     private var header: some View {
         let hour = calendar.component(.hour, from: Date())
-        return HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: metrics.pt(0.4)) {
-                Text(greeting(TimeTextPolicy.greeting(forHour: hour)))
-                    .font(.system(size: metrics.text(3.5), weight: .regular))
-                    .foregroundStyle(.white.opacity(0.72))
-                Text(session.activeProfile?.name ?? String(localized: "Guest"))
-                    .font(.system(size: metrics.text(3.5), weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .textCase(.uppercase)
-            .lineLimit(1)
-            .accessibilityElement(children: .combine)
-            Spacer()
-            if let recognitionIndicator {
-                recognitionIndicator()
-            }
-            Button(action: onProfile) {
-                ProfileAvatar(profile: session.activeProfile, diameter: metrics.pt(9.5))
-            }
-            .buttonStyle(.plain)
-            .hoverEffect(.lift)
-            .accessibilityLabel(session.activeProfile.map { Text("Switch profile. Current: \($0.name)") } ?? Text("Switch profile. Current: Guest"))
-            .accessibilityIdentifier("hub.profile")
+        return VStack(alignment: .leading, spacing: metrics.pt(0.4)) {
+            Text(greeting(TimeTextPolicy.greeting(forHour: hour)))
+                .font(.system(size: metrics.text(3.5), weight: .regular))
+                .foregroundStyle(.white.opacity(0.72))
+            Text(session.activeProfile?.name ?? String(localized: "Guest"))
+                .font(.system(size: metrics.text(3.5), weight: .bold))
+                .foregroundStyle(.white)
         }
+        .textCase(.uppercase)
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
     }
 
     private func greeting(_ part: DayPart) -> LocalizedStringKey {
@@ -134,12 +157,12 @@ struct HomeScreenView: View {
     }
 
     @ViewBuilder
-    private func itemView(_ item: HomeScreenItem) -> some View {
+    private func itemView(_ item: HomeScreenItem, widgetSide: CGFloat) -> some View {
         let visibility = VisibilityPolicy.visibility(for: item.access, context: audience)
         let tap = VisibilityPolicy.tapAction(for: item.access, context: audience, isDeviceUnlockOffered: showsDeviceUnlock)
-        let act: (HubApp) -> Void = { app in
+        let act: (HubApp, UnitPoint) -> Void = { app, anchor in
             switch tap {
-            case .open: onOpen(app)
+            case .open: onOpen(app, anchor)
             case .requestUnlock: onUnlock(app)
             case .none: break
             }
@@ -147,9 +170,13 @@ struct HomeScreenView: View {
         Group {
             switch item {
             case .app(let app):
-                AppIconView(app: app, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(app) }
+                AppIconView(app: app, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(app, $0) }
             case .widget(let widget):
-                HomeWidgetView(kind: widget, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(widget.app) }
+                // A widget is laid out in hundredths of a canvas on which it is 39.4 across, so
+                // it is given the canvas that makes it the size of its place in the row.
+                HomeWidgetView(kind: widget, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(widget.app, .center) }
+                    .frame(width: widgetSide, height: widgetSide)
+                    .environment(\.hubMetrics, HubMetrics(side: widgetSide / 0.394, textScale: metrics.textScale))
             }
         }
         .draggable(item.id)
@@ -168,59 +195,35 @@ extension AppIconView {
     }
 }
 
-/// Puts each icon and widget in its grid cell. A real layout, so each item's frame is where it
-/// is drawn and scroll visibility can be judged per item.
-struct HomeGridLayout: Layout {
-    let packed: HomeGridPacker.Result
-    let columns: Int
-    let cell: CGFloat
-    let rowHeight: CGFloat
-    let gapX: CGFloat
-    let gapY: CGFloat
-
-    private func size(span: Int) -> CGSize {
-        let count = CGFloat(span)
-        return CGSize(width: cell * count + gapX * (count - 1), height: rowHeight * count + gapY * (count - 1))
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let columns = CGFloat(columns)
-        let rows = CGFloat(packed.rowCount)
-        return CGSize(width: cell * columns + gapX * (columns - 1), height: max(0, rows * (rowHeight + gapY) - gapY))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (subview, placement) in zip(subviews, packed.placements) {
-            let origin = CGPoint(
-                x: bounds.minX + CGFloat(placement.column) * (cell + gapX),
-                y: bounds.minY + CGFloat(placement.row) * (rowHeight + gapY)
-            )
-            subview.place(at: origin, anchor: .topLeading, proposal: ProposedViewSize(size(span: placement.span)))
-        }
-    }
-}
-
 /// An app icon: a rounded square in the app's color with its symbol, and the name underneath.
+/// In Night Mode it is an outline, so the only color on screen stays red.
 struct AppIconView: View {
     let app: HubApp
     let isRedacted: Bool
     /// The icon is locked, and tapping it asks for the device's biometrics.
     var offersUnlock = false
-    let action: () -> Void
+    /// Called with where the icon is on the canvas.
+    let action: (UnitPoint) -> Void
     @Environment(\.hubMetrics) private var metrics
+    @Environment(\.hubIsNight) private var isNight
+    @State private var center = CGPoint.zero
 
     var body: some View {
-        let size = metrics.pt(14.5)
+        let size = max(metrics.token(DesignTokens.appIcon), 56)
+        let shape = RoundedRectangle(cornerRadius: size * 17 / 76, style: .continuous)
         let base = app.tint.map { Color($0) } ?? Color(white: 0.34)
-        Button(action: action) {
-            VStack(spacing: metrics.pt(1)) {
+        Button {
+            action(UnitPoint(x: center.x / max(metrics.width, 1), y: center.y / max(metrics.height, 1)))
+        } label: {
+            VStack(spacing: metrics.token(6)) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-                        .fill(LinearGradient(colors: [base.opacity(0.92), base], startPoint: .top, endPoint: .bottom))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
-                                .fill(LinearGradient(colors: [.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center))
-                        )
+                    if isNight {
+                        shape.stroke(.white, lineWidth: 2)
+                    } else {
+                        shape
+                            .fill(LinearGradient(colors: [base.opacity(0.92), base], startPoint: .top, endPoint: .bottom))
+                            .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.28), .clear], startPoint: .top, endPoint: .center)))
+                    }
                     Image(systemName: app.symbolName)
                         .font(.system(size: size * 0.5, weight: .medium))
                         .foregroundStyle(.white)
@@ -239,19 +242,28 @@ struct AppIconView: View {
                     }
                 }
                 Text(app.title)
-                    .font(.system(size: metrics.text(2.9), weight: .medium))
+                    .font(.system(size: metrics.textToken(13), weight: .medium))
                     .foregroundStyle(.white.opacity(isRedacted ? 0.5 : 1))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .shadow(color: .black.opacity(0.35), radius: metrics.pt(0.4))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isRedacted && !offersUnlock)
         .hoverEffect(.lift)
+        .onGeometryChange(for: CGPoint.self) { proxy in
+            let frame = proxy.frame(in: .named(HubCoordinateSpace.canvas))
+            return CGPoint(x: frame.midX, y: frame.midY)
+        } action: { center = $0 }
         .accessibilityHint(lockedHint)
         .accessibilityIdentifier("app.\(app.rawValue)")
     }
+}
+
+/// Names of the coordinate spaces the shell measures in.
+enum HubCoordinateSpace {
+    static let canvas = "hubCanvas"
 }

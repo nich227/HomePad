@@ -84,8 +84,31 @@ import Testing
 @Suite struct TimeTextTests {
     @Test func density_whenFarAndAdaptive_thenGlanceable() {
         #expect(FaceDensity(proximity: .far) == .glanceable)
+        #expect(FaceDensity(proximity: .mid) == .contextual)
         #expect(FaceDensity(proximity: .near) == .detailed)
         #expect(FaceDensity(proximity: .far, adaptiveDetail: false) == .detailed)
+        #expect(FaceDensity(proximity: .mid, adaptiveDetail: false) == .detailed)
+    }
+
+    @Test func density_whenCloser_thenLabelsThenControlsAppear() {
+        #expect(FaceDensity.allCases.map(\.showsLabels) == [false, true, true])
+        #expect(FaceDensity.allCases.map(\.showsControls) == [false, false, true])
+        let middle = TimeTextPolicy.clockText(for: ClockReading(hour: 15, minute: 4, second: 9), density: .contextual, hourCycle: .twelve, showsSeconds: true)
+        #expect(middle.secondText == "09" && middle.periodText == "PM")
+        #expect(TimeTextPolicy.dateLineStyle(for: .contextual) == .full)
+    }
+
+    @Test func tokens_whenScaled_thenProportionalToTheShorterSide() {
+        #expect(DesignTokens.scaled(DesignTokens.outerMargin, side: DesignTokens.baseSide) == 16)
+        #expect(DesignTokens.scaled(DesignTokens.tileRadius, side: 1088) == 56)
+        #expect(DesignTokens.hero(for: .glanceable) == DesignTokens.heroFar)
+        #expect(DesignTokens.hero(for: .contextual) == DesignTokens.heroNear)
+        #expect(DesignTokens.hero(for: .detailed) == DesignTokens.heroNear)
+        #expect(DesignTokens.minimumTouch == 44 && DesignTokens.appIcon == 76 && DesignTokens.gutter == 12)
+        #expect(DesignTokens.screenRadius == 60 && DesignTokens.tileTitle == 17 && DesignTokens.tileSubtitle == 14)
+        #expect(DesignTokens.subtitleOpacity == 0.72 && DesignTokens.iconBadge == 36)
+        #expect(DesignTokens.pillWidth == 260 && DesignTokens.pillHeight == 44)
+        #expect(DesignTokens.pillCardWidth == 512 && DesignTokens.pillCardHeight == 220)
     }
 
     @Test func clockText_whenTwelveHourDetailed_thenShowsPeriodAndSeconds() {

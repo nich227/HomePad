@@ -11,34 +11,41 @@ struct AnalogFace: View {
     @Environment(\.hubPreferences) private var preferences
     @Environment(\.calendar) private var calendar
 
+    @Environment(\.hubIsNight) private var isNight
+
     private var options: FaceOptions { preferences.faces }
 
     private var dialColor: Color {
+        if isNight { return Color.black }
         switch options.analogColor {
-        case .green: Color(red: 0.24, green: 0.62, blue: 0.38)
-        case .black: .black
-        default: options.analogColor.tint.map { Color($0) } ?? .black
+        case .green: return Color(red: 0.24, green: 0.62, blue: 0.38)
+        case .black: return Color.black
+        default: return options.analogColor.tint.map { Color($0) } ?? Color.black
         }
     }
 
     private var inkColor: Color {
-        options.analogColor == .black ? Color(white: 0.85) : .black
+        isNight || options.analogColor == .black ? Color(white: 0.85) : .black
     }
 
     var body: some View {
-        let detailed = density == .detailed
+        let detailed = density.showsLabels
         let numerals = options.analogNumerals
         ZStack {
             Canvas { context, size in
-                let radius = size.width / 2
+                // The hands turn on a circle. The numerals sit toward the edges of whatever
+                // shape the screen is, so a wide screen is filled edge to edge.
+                let radius = min(size.width, size.height) / 2
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let stretch = CGSize(width: size.width / 2 / radius, height: size.height / 2 / radius)
                 let angles = ClockHandAngles(reading: ClockReading(date: date, calendar: calendar), sweeps: sweeps)
                 if options.analogShowsTicks {
                     ClockDrawing.ticks(context, center: center, radius: radius * 0.97, hoursOnly: false, color: inkColor, width: radius * 0.012)
                 }
                 let large = numerals == .large
                 for hour in numerals.hours {
-                    let position = ClockDrawing.point(center: center, radius: radius, degrees: ClockDial.numeralAngle(hour: hour), fraction: large ? 0.62 : 0.78)
+                    let onCircle = ClockDrawing.point(center: .zero, radius: radius, degrees: ClockDial.numeralAngle(hour: hour), fraction: large ? 0.62 : 0.78)
+                    let position = CGPoint(x: center.x + onCircle.x * stretch.width, y: center.y + onCircle.y * stretch.height)
                     let text = Text(verbatim: "\(hour)")
                         .font(.system(size: radius * (large ? 0.98 : 0.2), weight: large ? .light : .medium))
                         .foregroundStyle(inkColor)
@@ -75,26 +82,30 @@ struct FadeFace: View {
     @Environment(\.faceDensity) private var density
     @Environment(\.hubPreferences) private var preferences
     @Environment(\.calendar) private var calendar
+    @Environment(\.hubIsNight) private var isNight
 
     private var palette: (dial: Color, hands: Color, second: Color) {
+        if isNight { return (.black, Color(white: 0.85), .white) }
         switch preferences.faces.fadeColor {
-        case .gray: (Color(red: 0.6, green: 0.61, blue: 0.63), Color(white: 0.17), Color(red: 0.16, green: 0.45, blue: 0.95))
-        case .rose: (Color(red: 0.85, green: 0.7, blue: 0.69), Color(red: 0.36, green: 0.16, blue: 0.19), Color(red: 0.93, green: 0.55, blue: 0.72))
+        case .gray: return (Color(red: 0.6, green: 0.61, blue: 0.63), Color(white: 0.17), Color(red: 0.16, green: 0.45, blue: 0.95))
+        case .rose: return (Color(red: 0.85, green: 0.7, blue: 0.69), Color(red: 0.36, green: 0.16, blue: 0.19), Color(red: 0.93, green: 0.55, blue: 0.72))
         }
     }
 
     var body: some View {
         let colors = palette
         Canvas { context, size in
-            let radius = size.width / 2
+            let radius = min(size.width, size.height) / 2
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let stretch = CGSize(width: size.width / 2 / radius, height: size.height / 2 / radius)
             let angles = ClockHandAngles(reading: ClockReading(date: date, calendar: calendar), sweeps: sweeps)
-            let spread: Double = density == .detailed ? 115 : 75
+            let spread: Double = density.showsLabels ? 115 : 75
             for hour in 1...12 {
                 let opacity = ClockDial.fadeOpacity(numeralHour: hour, minuteAngle: angles.minute, spread: spread)
                 guard opacity > 0.01 else { continue }
                 let degrees = ClockDial.numeralAngle(hour: hour)
-                let position = ClockDrawing.point(center: center, radius: radius, degrees: degrees, fraction: 0.74)
+                let onCircle = ClockDrawing.point(center: .zero, radius: radius, degrees: degrees, fraction: 0.74)
+                let position = CGPoint(x: center.x + onCircle.x * stretch.width, y: center.y + onCircle.y * stretch.height)
                 let font = Font.system(size: radius * 0.24, weight: .medium, design: .rounded)
                 var rotated = context
                 rotated.translateBy(x: position.x, y: position.y)
@@ -128,7 +139,7 @@ struct DigitalFace: View {
     @Environment(HouseholdSession.self) private var session
 
     var body: some View {
-        let detailed = density == .detailed
+        let detailed = density.showsLabels
         let options = preferences.faces
         let tint = options.digitalAccent.tint(profileTint: session.activeProfile?.tint)
         let color = tint.map { Color($0) } ?? Color.white
@@ -138,7 +149,7 @@ struct DigitalFace: View {
                 .font(.system(size: metrics.text(detailed ? 3.6 : 5.4), weight: .semibold))
                 .textCase(.uppercase)
                 .foregroundStyle(Color.hubSecondaryText)
-                .padding(.top, metrics.pt(detailed ? 9 : 16))
+                .padding(.top, max(metrics.pt(detailed ? 9 : 16), metrics.topBar + metrics.pt(1)))
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: metrics.pt(1.5)) {
                 Text(time.digits)
@@ -168,6 +179,7 @@ struct DigitalFace: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
         .accessibilityElement(children: .combine)
+        .startsOnFirstUse(when: detailed) { environment.weather.begin() }
     }
 
     private var weatherSpot: some View {
@@ -180,7 +192,7 @@ struct DigitalFace: View {
                 Text(weather.map { units.degrees($0.temperatureCelsius) } ?? String(localized: "Weather"))
                     .font(.system(size: metrics.text(weather == nil ? 3.4 : 5), weight: .semibold))
                     .foregroundStyle(.white)
-                Text(weather?.conditionText ?? String(localized: "Not set up"))
+                Text(weather?.conditionText ?? WeatherMessage(problem: environment.weather.problem).title)
                     .font(.system(size: metrics.text(2.6)))
                     .foregroundStyle(Color.hubSecondaryText)
             }
@@ -225,14 +237,15 @@ struct RainbowFace: View {
     @Environment(\.hubUnits) private var units
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
+    @Environment(\.hubIsNight) private var isNight
 
     var body: some View {
-        let detailed = density == .detailed
+        let detailed = density.showsLabels
         let time = FaceText.clock(date, calendar: calendar, density: density, units: units)
         ZStack {
             VStack(spacing: 0) {
                 ForEach(RainbowTint.allCases, id: \.self) { tint in
-                    Color(tint)
+                    isNight ? Color.black : Color(tint)
                 }
             }
             .accessibilityHidden(true)

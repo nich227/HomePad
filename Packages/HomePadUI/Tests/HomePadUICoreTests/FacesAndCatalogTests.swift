@@ -69,21 +69,21 @@ import Testing
     @Test func visibility_whenGuest_thenOnlyGuestAppsShow() {
         let visible = HubApp.allCases.filter { VisibilityPolicy.visibility(of: $0, context: guest) == .visible }
         #expect(Set(visible) == [.clock, .timers, .home, .music, .mirror, .recipes, .weather, .beam, .settings])
-        #expect(VisibilityPolicy.visibility(of: HubApp.messages, context: guest) == .hidden)
+        #expect(VisibilityPolicy.visibility(of: HubApp.projectedApps, context: guest) == .hidden)
         #expect(VisibilityPolicy.visibility(of: .alarms, context: guest) == .hidden)
     }
 
     @Test func visibility_whenProfilePickedByHand_thenPersonalAppsAreRedacted() {
-        #expect(VisibilityPolicy.visibility(of: HubApp.messages, context: manual) == .redacted)
+        #expect(VisibilityPolicy.visibility(of: HubApp.projectedApps, context: manual) == .redacted)
         #expect(VisibilityPolicy.visibility(of: .projectedApps, context: manual) == .redacted)
         #expect(VisibilityPolicy.visibility(of: .alarms, context: manual) == .visible)
-        #expect(!VisibilityPolicy.canOpen(.messages, context: manual))
+        #expect(!VisibilityPolicy.canOpen(.projectedApps, context: manual))
         #expect(VisibilityPolicy.canOpen(.timers, context: manual))
     }
 
     @Test func visibility_whenFaceUnlocked_thenPersonalAppsOpen() {
-        #expect(VisibilityPolicy.visibility(of: HubApp.messages, context: unlocked) == .visible)
-        #expect(VisibilityPolicy.canOpen(.messages, context: unlocked))
+        #expect(VisibilityPolicy.visibility(of: HubApp.projectedApps, context: unlocked) == .visible)
+        #expect(VisibilityPolicy.canOpen(.projectedApps, context: unlocked))
     }
 
     @Test func visibility_whenSetupModeOff_thenPeopleAndPairingHidden() {
@@ -93,12 +93,13 @@ import Testing
         #expect(VisibilityPolicy.visibility(of: .pairing, context: guestSetup) == .visible)
     }
 
-    @Test func widgetVisibility_whenPersonal_thenRedactedUntilUnlocked() {
-        #expect(VisibilityPolicy.visibility(of: HubWidgetKind.messages, context: guest) == .hidden)
-        #expect(VisibilityPolicy.visibility(of: HubWidgetKind.messages, context: manual) == .redacted)
-        #expect(VisibilityPolicy.visibility(of: HubWidgetKind.messages, context: unlocked) == .visible)
+    @Test func widgetVisibility_whenMemberOnly_thenHiddenForGuests() {
         #expect(VisibilityPolicy.visibility(of: HubWidgetKind.nextAlarm, context: guest) == .hidden)
+        #expect(VisibilityPolicy.visibility(of: HubWidgetKind.nextAlarm, context: manual) == .visible)
         #expect(VisibilityPolicy.visibility(of: HubWidgetKind.timers, context: guest) == .visible)
+        #expect(VisibilityPolicy.visibility(for: .personal, context: guest) == .hidden)
+        #expect(VisibilityPolicy.visibility(for: .personal, context: manual) == .redacted)
+        #expect(VisibilityPolicy.visibility(for: .personal, context: unlocked) == .visible)
     }
 
     @Test func tapAction_whenPersonalItemIsLocked_thenUnlockOnlyWhileTheDeviceOffersIt() {
@@ -111,9 +112,9 @@ import Testing
     }
 
     @Test func appToOpen_whenUnlockWorked_thenTheTappedAppOpensOtherwiseNothing() {
-        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .messages, context: unlocked) == .messages)
-        #expect(VisibilityPolicy.appToOpen(afterUnlock: false, requested: .messages, context: unlocked) == nil)
-        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .messages, context: manual) == nil)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .projectedApps, context: unlocked) == .projectedApps)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: false, requested: .projectedApps, context: unlocked) == nil)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .projectedApps, context: manual) == nil)
         #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: nil, context: unlocked) == nil)
     }
 
@@ -122,6 +123,15 @@ import Testing
         #expect(!VisibilityPolicy.showsDeviceUnlock(context: manual, isDeviceUnlockOffered: false))
         #expect(!VisibilityPolicy.showsDeviceUnlock(context: unlocked, isDeviceUnlockOffered: true))
         #expect(!VisibilityPolicy.showsDeviceUnlock(context: guest, isDeviceUnlockOffered: true))
+    }
+
+    @Test func isListed_whenAnOptionalAppHasNothingBehindIt_thenItHasNoIcon() {
+        #expect(VisibilityPolicy.isListed(.music, available: []))
+        #expect(!VisibilityPolicy.isListed(.intercom, available: []))
+        #expect(!VisibilityPolicy.isListed(.calendar, available: [.intercom]))
+        #expect(VisibilityPolicy.isListed(.intercom, available: [.intercom]))
+        #expect(VisibilityPolicy.visibility(of: HubApp.intercom, context: guest) == .hidden)
+        #expect(VisibilityPolicy.visibility(of: HubApp.calendar, context: manual) == .redacted)
     }
 
     @Test func needsSetupHint_whenNobodyEnrolledAndSetupOff_thenTrue() {
@@ -137,12 +147,14 @@ import Testing
             #expect(app.requiresPersonalContent == (app.access == .personal))
             _ = app.tint
         }
-        #expect(HubApp.allCases.filter(\.isSlot) == [.beam, .messages, .projectedApps, .people, .pairing])
-        #expect(HubApp.clock.tint == nil && HubApp.messages.tint == .green)
+        #expect(HubApp.allCases.filter(\.isSlot) == [.beam, .projectedApps, .people, .pairing, .intercom, .calendar])
+        #expect(HubApp.allCases.filter(\.isOptional) == [.intercom, .calendar])
+        #expect(HubApp.intercom.access == .member && HubApp.calendar.access == .personal)
+        #expect(HubApp.clock.tint == nil && HubApp.home.tint != nil)
         for widget in HubWidgetKind.allCases {
             #expect(widget.id == widget.rawValue)
-            #expect(widget.requiresPersonalContent == (widget == .messages))
+            #expect(!widget.requiresPersonalContent)
         }
-        #expect(HubWidgetKind.allCases.map(\.app) == [.clock, .clock, .weather, .timers, .alarms, .music, .home, .home, .home, .photos, .messages])
+        #expect(HubWidgetKind.allCases.map(\.app) == [.clock, .clock, .weather, .timers, .alarms, .music, .home, .home, .home, .photos])
     }
 }

@@ -16,9 +16,10 @@ struct FaceView: View {
     var facePosition: (@MainActor () -> FacePosition?)?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.faceDensity) private var density
+    @Environment(\.hubMotion) private var motion
 
     private var isSmooth: Bool {
-        (kind == .analog || kind == .fade || kind == .flow) && !reduceMotion
+        (kind == .analog || kind == .fade || kind == .flow || kind == .memories) && !reduceMotion
     }
 
     var body: some View {
@@ -33,7 +34,7 @@ struct FaceView: View {
                 }
             }
         }
-        .animation(.smooth(duration: 0.55), value: density)
+        .animation(motion.gentle, value: density)
         .accessibilityElement(children: .contain)
     }
 
@@ -42,6 +43,7 @@ struct FaceView: View {
         switch kind {
         case .modular: ModularFace(date: date)
         case .photos: PhotosFace(date: date)
+        case .memories: MemoriesFace(date: date)
         case .weather: WeatherFace(date: date)
         case .homeModular: HomeModularFace(date: date)
         case .calendar: CalendarFace(date: date)
@@ -56,10 +58,29 @@ struct FaceView: View {
 }
 
 extension FaceKind {
+    /// The face's name in the person's language, as the hub shows it.
+    public var displayName: String {
+        switch self {
+        case .modular: String(localized: "Modular")
+        case .photos: String(localized: "Photos")
+        case .memories: String(localized: "Memories")
+        case .weather: String(localized: "Weather")
+        case .homeModular: String(localized: "Home Modular")
+        case .calendar: String(localized: "Calendar")
+        case .flow: String(localized: "Flow")
+        case .analog: String(localized: "Analog")
+        case .fade: String(localized: "Fade")
+        case .digital: String(localized: "Digital")
+        case .homeCamera: String(localized: "Home Camera")
+        case .rainbow: String(localized: "Rainbow")
+        }
+    }
+
     var title: LocalizedStringKey {
         switch self {
         case .modular: "Modular"
         case .photos: "Photos"
+        case .memories: "Memories"
         case .weather: "Weather"
         case .homeModular: "Home Modular"
         case .calendar: "Calendar"
@@ -73,7 +94,7 @@ extension FaceKind {
     }
 }
 
-/// One face on a square canvas with sample services, for previews.
+/// One face with sample services, for previews.
 struct FacePreview: View {
     let kind: FaceKind
     let proximity: Proximity
@@ -92,39 +113,28 @@ struct FacePreview: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let side = min(proxy.size.width, proxy.size.height)
             FaceView(kind: kind, facePosition: { FacePosition(x: 0.7, y: 0.4) })
-                .frame(width: side, height: side)
-                .clipShape(RoundedRectangle(cornerRadius: side * CGFloat(CanvasLayout.cornerRadiusFraction), style: .continuous))
-                .environment(\.hubMetrics, HubMetrics(side: side))
+                .environment(\.hubMetrics, HubMetrics(size: proxy.size))
                 .environment(\.faceDensity, FaceDensity(proximity: proximity))
                 .environment(environment)
                 .environment(session)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color.black)
+        .ignoresSafeArea()
     }
 }
 
-#Preview("Modular, far") { FacePreview(.modular, .far) }
-#Preview("Modular, near") { FacePreview(.modular, .near) }
-#Preview("Photos, far") { FacePreview(.photos, .far) }
+#Preview("Home Modular, near", traits: .landscapeLeft) { FacePreview(.homeModular, .near) }
+#Preview("Home Modular, far", traits: .landscapeLeft) { FacePreview(.homeModular, .far) }
+#Preview("Home Modular, portrait") { FacePreview(.homeModular, .mid) }
+#Preview("Modular, near", traits: .landscapeLeft) { FacePreview(.modular, .near) }
 #Preview("Photos, near") { FacePreview(.photos, .near) }
-#Preview("Weather, far") { FacePreview(.weather, .far) }
-#Preview("Weather, near") { FacePreview(.weather, .near) }
-#Preview("Home Modular, far") { FacePreview(.homeModular, .far) }
-#Preview("Home Modular, near") { FacePreview(.homeModular, .near) }
-#Preview("Calendar, far") { FacePreview(.calendar, .far) }
-#Preview("Calendar, near") { FacePreview(.calendar, .near) }
-#Preview("Flow, far") { FacePreview(.flow, .far) }
-#Preview("Flow, near") { FacePreview(.flow, .near) }
-#Preview("Analog, far") { FacePreview(.analog, .far) }
-#Preview("Analog, near") { FacePreview(.analog, .near) }
-#Preview("Fade, far") { FacePreview(.fade, .far) }
-#Preview("Fade, near") { FacePreview(.fade, .near) }
-#Preview("Digital, far") { FacePreview(.digital, .far) }
-#Preview("Digital, near") { FacePreview(.digital, .near) }
-#Preview("Home Camera, far") { FacePreview(.homeCamera, .far) }
-#Preview("Home Camera, near") { FacePreview(.homeCamera, .near) }
-#Preview("Rainbow, far") { FacePreview(.rainbow, .far) }
-#Preview("Rainbow, near") { FacePreview(.rainbow, .near) }
+#Preview("Memories, near") { FacePreview(.memories, .near) }
+#Preview("Weather, near", traits: .landscapeLeft) { FacePreview(.weather, .near) }
+#Preview("Calendar, near", traits: .landscapeLeft) { FacePreview(.calendar, .near) }
+#Preview("Flow, near", traits: .landscapeLeft) { FacePreview(.flow, .near) }
+#Preview("Analog, near", traits: .landscapeLeft) { FacePreview(.analog, .near) }
+#Preview("Fade, near", traits: .landscapeLeft) { FacePreview(.fade, .near) }
+#Preview("Digital, far", traits: .landscapeLeft) { FacePreview(.digital, .far) }
+#Preview("Home Camera, near", traits: .landscapeLeft) { FacePreview(.homeCamera, .near) }
+#Preview("Rainbow, mid") { FacePreview(.rainbow, .mid) }

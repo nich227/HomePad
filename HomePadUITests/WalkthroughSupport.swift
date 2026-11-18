@@ -10,6 +10,19 @@ class WalkthroughCase: XCTestCase {
 
     var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    /// Set TEST_RUNNER_HOMEPAD_ORIENTATION=portrait to walk the hub upright. Those captures
+    /// get "pt-" in front of their names.
+    var isPortraitRun: Bool {
+        ProcessInfo.processInfo.environment["HOMEPAD_ORIENTATION"] == "portrait"
+    }
+
+    /// Put in front of every screenshot name.
+    var snapshotPrefix: String { "" }
+
+    /// False where the app is framed smaller than the window, so the window's edges are not
+    /// the hub's edges.
+    var usesEdgeSwipes: Bool { true }
+
     /// The small iPad stands in for a folding iPhone, whose displays this machine cannot
     /// simulate. Its screen is large enough to frame both of them.
     var isDuoStandIn: Bool {
@@ -28,6 +41,15 @@ class WalkthroughCase: XCTestCase {
         static let deviceUnlock = ["HOMEPAD_UITEST_DEVICE_UNLOCK": "1"]
         static let skipWelcome = ["HOMEPAD_UITEST_SKIP_WELCOME": "1"]
         static let fold = ["HOMEPAD_UITEST_FOLD": "1"]
+        /// Set on every launch: no Apple Intelligence gate in front of the app, and an
+        /// assistant that answers from a script with no model, microphone, or speaker.
+        static let always = ["HOMEPAD_UITEST_SKIP_AI_GATE": "1", "HOMEPAD_UITEST_SCRIPTED_ASSISTANT": "1"]
+        static let square = ["HOMEPAD_UITEST_CANVAS": "square"]
+        /// Stands in for Reduce Transparency, which a test cannot turn on.
+        static let solidGlass = ["HOMEPAD_UITEST_SOLID_GLASS": "1"]
+        static let assistant = ["HOMEPAD_UITEST_ASSISTANT": "1"]
+        /// Runs the shell's animations this many times slower.
+        static func slowMotion(_ factor: Int) -> [String: String] { ["HOMEPAD_UITEST_SLOW_MOTION": "\(factor)"] }
         static func role(_ value: String) -> [String: String] { ["HOMEPAD_UITEST_ROLE": value] }
         /// Frames the whole app to a size in points, for example "626x890".
         static func viewport(_ value: String) -> [String: String] { ["HOMEPAD_UITEST_VIEWPORT": value] }
@@ -40,14 +62,33 @@ class WalkthroughCase: XCTestCase {
     override func tearDown() async throws {
         app.terminate()
         guard !notes.isEmpty, let directory = screenshotDirectory else { return }
-        let url = URL(fileURLWithPath: directory).appendingPathComponent("notes-\(name.filter(\.isLetter)).txt")
+        let url = URL(fileURLWithPath: directory).appendingPathComponent("\(snapshotPrefix)notes-\(name.filter(\.isLetter)).txt")
         try? notes.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
     }
 
     func launch(_ hooks: [String: String]...) {
+        launch(hooks)
+    }
+
+    func launch(_ hooks: [[String: String]]) {
         app.terminate()
-        app.launchEnvironment = hooks.reduce(into: [:]) { $0.merge($1) { _, new in new } }
+        app.launchEnvironment = hooks.reduce(into: Hook.always) { $0.merge($1) { _, new in new } }
         app.launch()
+    }
+
+    /// Closes the assistant, whichever one is filling the slot: the stand-in closes on a tap,
+    /// and any assistant closes on a swipe up from the bottom edge.
+    func closeAssistant() {
+        let sample = element("assistant.sample")
+        if sample.exists {
+            sample.tap()
+        } else {
+            edgeSwipe(fromX: 0.5, fromY: 0.985, toX: 0.5, toY: 0.55)
+        }
+        pause(1.5)
+        if element("hub.assistantOpen").exists {
+            note("the assistant stayed open after it was asked to close")
+        }
     }
 
     func note(_ text: String) {
@@ -84,6 +125,7 @@ class WalkthroughCase: XCTestCase {
     func snapshot(_ name: String) {
         let screenshot = XCUIScreen.main.screenshot()
         let attachment = XCTAttachment(screenshot: screenshot)
+        let name = snapshotPrefix + name
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -93,15 +135,37 @@ class WalkthroughCase: XCTestCase {
         try? screenshot.pngRepresentation.write(to: url)
     }
 
+    /// Swipes up from the bottom edge, the way a person gets to the Home Screen. The bar at the
+    /// bottom is the fallback when the swipe is not taken.
     func openHomeScreen() {
-        let button = app.buttons["hub.showHomeScreen"]
-        if button.waitForExistence(timeout: 5), button.isHittable {
-            button.tap()
-        } else {
-            app.swipeUp()
+        let home = app.scrollViews["hub.homeScreen"]
+        if usesEdgeSwipes {
+            edgeSwipe(fromX: 0.5, fromY: 0.985, toX: 0.5, toY: 0.55)
         }
-        XCTAssertTrue(app.scrollViews["hub.homeScreen"].waitForExistence(timeout: 8), "the Home Screen did not open")
+        if !home.waitForExistence(timeout: usesEdgeSwipes ? 4 : 0.5) {
+            if usesEdgeSwipes {
+                note("the swipe up from the bottom edge did not open the Home Screen; used the bar")
+            }
+            app.buttons["hub.showHomeScreen"].firstMatch.tap()
+        }
+        XCTAssertTrue(home.waitForExistence(timeout: 8), "the Home Screen did not open")
         pause(1.5)
+    }
+
+    /// A drag between two points given as fractions of the app's window.
+    func edgeSwipe(fromX: CGFloat, fromY: CGFloat, toX: CGFloat, toY: CGFloat) {
+        let window = app.windows.firstMatch
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: fromX, dy: fromY))
+        let end = window.coordinate(withNormalizedOffset: CGVector(dx: toX, dy: toY))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0.05)
+    }
+
+    func tapWindow(x: CGFloat, y: CGFloat) {
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+    }
+
+    func element(_ id: String) -> XCUIElement {
+        app.descendants(matching: .any)[id].firstMatch
     }
 
     /// Finds an icon on the Home Screen, scrolling if it is below the fold, and taps it.

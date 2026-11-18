@@ -15,15 +15,16 @@ public enum ContentAccess: Sendable, Equatable {
 
 public enum HubApp: String, CaseIterable, Codable, Sendable, Identifiable {
     case clock, timers, alarms, home, music, mirror, recipes, weather, photos
-    case beam, messages, projectedApps, people, pairing, settings
+    case beam, projectedApps, people, pairing, settings
+    case intercom, calendar
 
     public var id: String { rawValue }
 
     public var access: ContentAccess {
         switch self {
         case .clock, .timers, .home, .music, .mirror, .recipes, .weather, .beam, .settings: .guest
-        case .alarms, .photos: .member
-        case .messages, .projectedApps: .personal
+        case .alarms, .photos, .intercom: .member
+        case .projectedApps, .calendar: .personal
         case .people, .pairing: .setup
         }
     }
@@ -33,9 +34,15 @@ public enum HubApp: String, CaseIterable, Codable, Sendable, Identifiable {
     /// Apps whose content comes from another package through a slot.
     public var isSlot: Bool {
         switch self {
-        case .beam, .messages, .projectedApps, .people, .pairing: true
+        case .beam, .projectedApps, .people, .pairing, .intercom, .calendar: true
         default: false
         }
+    }
+
+    /// Apps that exist only when another package supplies them. Their icon is left out
+    /// otherwise, because an icon that does nothing is worse than no icon.
+    public var isOptional: Bool {
+        self == .intercom || self == .calendar
     }
 
     public var symbolName: String {
@@ -50,11 +57,12 @@ public enum HubApp: String, CaseIterable, Codable, Sendable, Identifiable {
         case .weather: "cloud.sun.fill"
         case .photos: "photo.on.rectangle.angled"
         case .beam: "dot.radiowaves.left.and.right"
-        case .messages: "message.fill"
         case .projectedApps: "iphone.gen3.radiowaves.left.and.right"
         case .people: "person.2.fill"
         case .pairing: "link"
         case .settings: "gearshape.fill"
+        case .intercom: "waveform"
+        case .calendar: "calendar"
         }
     }
 
@@ -66,14 +74,15 @@ public enum HubApp: String, CaseIterable, Codable, Sendable, Identifiable {
         case .music, .recipes: .red
         case .weather, .beam, .projectedApps: .blue
         case .photos: .yellow
-        case .messages: .green
         case .people, .pairing: .purple
+        case .intercom: .yellow
+        case .calendar: .red
         }
     }
 }
 
 public enum HubWidgetKind: String, CaseIterable, Codable, Sendable, Identifiable {
-    case clock, calendar, weather, timers, nextAlarm, nowPlaying, home, thermostat, camera, photo, messages
+    case clock, calendar, weather, timers, nextAlarm, nowPlaying, home, thermostat, camera, photo
 
     public var id: String { rawValue }
 
@@ -81,7 +90,6 @@ public enum HubWidgetKind: String, CaseIterable, Codable, Sendable, Identifiable
         switch self {
         case .clock, .calendar, .weather, .timers, .nowPlaying, .home, .thermostat, .camera, .photo: .guest
         case .nextAlarm: .member
-        case .messages: .personal
         }
     }
 
@@ -97,7 +105,6 @@ public enum HubWidgetKind: String, CaseIterable, Codable, Sendable, Identifiable
         case .nowPlaying: .music
         case .home, .thermostat, .camera: .home
         case .photo: .photos
-        case .messages: .messages
         }
     }
 }
@@ -150,6 +157,12 @@ public enum VisibilityPolicy {
 
     public static func visibility(of widget: HubWidgetKind, context: AudienceContext) -> ContentVisibility {
         visibility(for: widget.access, context: context)
+    }
+
+    /// Whether an app has an icon at all. An optional app is listed only while the package
+    /// behind it is supplying it.
+    public static func isListed(_ app: HubApp, available: Set<HubApp>) -> Bool {
+        !app.isOptional || available.contains(app)
     }
 
     /// Only a fully visible app opens. A redacted icon stays put so nothing personal is revealed.

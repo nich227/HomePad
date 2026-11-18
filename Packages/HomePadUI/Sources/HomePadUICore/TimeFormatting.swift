@@ -1,14 +1,64 @@
 import Foundation
 import HomePadCore
 
-/// How much a face shows. Glanceable is for someone across the room.
+/// How much a face shows, from how far away the person is.
 public enum FaceDensity: String, CaseIterable, Sendable {
+    /// Across the room: the large numbers only.
     case glanceable
+    /// On approach: labels, room names, and thumbnails appear.
+    case contextual
+    /// Within reach: the controls, at a size a finger can press.
     case detailed
 
     /// With adaptive detail off the hub always shows the detailed layout.
     public init(proximity: Proximity, adaptiveDetail: Bool = true) {
-        self = adaptiveDetail && proximity == .far ? .glanceable : .detailed
+        guard adaptiveDetail else {
+            self = .detailed
+            return
+        }
+        switch proximity {
+        case .far: self = .glanceable
+        case .mid: self = .contextual
+        case .near: self = .detailed
+        }
+    }
+
+    /// Subtitles, room labels, and thumbnails: from the middle distance in.
+    public var showsLabels: Bool { self != .glanceable }
+
+    /// Steppers, sliders, and other small controls: only within reach.
+    public var showsControls: Bool { self == .detailed }
+}
+
+/// The measurements the design is drawn to, in points on a 544 point square. `HubMetrics` scales
+/// them by the shorter side of the space the hub has.
+public enum DesignTokens {
+    public static let baseSide = 544.0
+    public static let outerMargin = 16.0
+    public static let gutter = 12.0
+    public static let tileRadius = 28.0
+    public static let screenRadius = 60.0
+    public static let heroFar = 96.0
+    public static let heroNear = 72.0
+    public static let tileTitle = 17.0
+    public static let tileSubtitle = 14.0
+    public static let subtitleOpacity = 0.72
+    public static let iconBadge = 36.0
+    public static let minimumTouch = 44.0
+    public static let appIcon = 76.0
+    public static let pillWidth = 260.0
+    public static let pillHeight = 44.0
+    public static let pillCardWidth = 512.0
+    public static let pillCardHeight = 220.0
+
+    /// A token scaled to a canvas whose shorter side is `side` points.
+    public static func scaled(_ token: Double, side: Double) -> Double {
+        token * side / baseSide
+    }
+
+    /// The hero number's size for a density, before scaling.
+    public static func hero(for density: FaceDensity) -> Double {
+        density == .glanceable ? heroFar : heroNear
     }
 }
 
@@ -45,7 +95,7 @@ public enum TimeTextPolicy {
     ) -> ClockText {
         let hour = displayHour(for: reading, hourCycle: hourCycle)
         let period: String? = hourCycle == .twelve ? (reading.hour < 12 ? "AM" : "PM") : nil
-        let detailed = density == .detailed
+        let detailed = density.showsLabels
         return ClockText(
             hourText: hourCycle == .twentyFour ? twoDigits(hour) : String(hour),
             minuteText: twoDigits(reading.minute),
@@ -55,7 +105,7 @@ public enum TimeTextPolicy {
     }
 
     public static func dateLineStyle(for density: FaceDensity) -> DateLineStyle {
-        density == .detailed ? .full : .short
+        density.showsLabels ? .full : .short
     }
 
     public static func dateLine(for date: Date, style: DateLineStyle, calendar: Calendar, locale: Locale) -> String {

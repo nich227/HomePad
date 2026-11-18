@@ -14,7 +14,8 @@ struct PhotosApp: View {
     var body: some View {
         let library = environment.photos
         let gap = metrics.pt(1.6)
-        let cell = (metrics.side - metrics.pt(4) * 2 - gap * 2) / 3
+        let columns = metrics.columns(3)
+        let cell = metrics.cell(count: columns, padding: metrics.pt(4), gap: gap)
         // The picker's label closure is not on the main actor, so it gets plain values.
         let adding = isImporting
         let labelSize = metrics.text(3.4)
@@ -29,7 +30,7 @@ struct PhotosApp: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: columns), spacing: gap) {
                             ForEach(library.picked) { photo in
                                 Image(uiImage: photo.image)
                                     .resizable()

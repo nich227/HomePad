@@ -58,7 +58,7 @@ struct PhotosFace: View {
             if options.photosLayout == .corner {
                 cornerTime
             }
-            if density == .detailed {
+            if density.showsLabels {
                 caption
                     .transition(.opacity)
             }
@@ -84,12 +84,11 @@ struct PhotosFace: View {
             Image(uiImage: photo.image)
                 .resizable()
                 .scaledToFill()
-                .frame(width: metrics.side, height: metrics.side)
+                .frame(width: metrics.width, height: metrics.height)
                 .accessibilityLabel("Photo")
         } else {
-            let tint = session.activeProfile?.tint ?? .red
-            LinearGradient(colors: [Color(tint).opacity(0.85), Color(tint).opacity(0.45)], startPoint: .top, endPoint: .bottom)
-                .accessibilityHidden(true)
+            // No photo chosen yet: the wallpaper stands in for one.
+            HubWallpaper()
         }
     }
 
@@ -99,7 +98,7 @@ struct PhotosFace: View {
             Image(uiImage: cutout)
                 .resizable()
                 .scaledToFill()
-                .frame(width: metrics.side, height: metrics.side)
+                .frame(width: metrics.width, height: metrics.height)
                 .accessibilityHidden(true)
         } else if photo == nil {
             // With no photo chosen, a plain silhouette stands in for the subject.
@@ -116,18 +115,20 @@ struct PhotosFace: View {
     private var tallDigits: some View {
         let columns = TimeTextPolicy.digitColumns(for: ClockReading(date: date, calendar: calendar), hourCycle: units.hourCycle)
         let hidesLeadingZero = units.hourCycle == .twelve && columns[0] == 0
-        return HStack(spacing: metrics.pt(3.4)) {
+        return HStack(spacing: metrics.width * 0.034) {
             digit(columns[0]).opacity(hidesLeadingZero ? 0 : 1)
             digit(columns[1])
-            Spacer(minLength: metrics.pt(4))
+            Spacer(minLength: metrics.width * 0.04)
             digit(columns[2])
             digit(columns[3])
         }
-        .padding(.horizontal, metrics.pt(5.5))
+        .padding(.horizontal, metrics.width * 0.055)
         .accessibilityElement()
         .accessibilityLabel(Text(date, style: .time))
     }
 
+    /// Each digit is as tall as the screen and a sixth of its width, so four of them span any
+    /// shape of screen with room in the middle for the subject.
     private func digit(_ value: Int) -> some View {
         let shape = TallDigitShape(digit: value, lineWidth: metrics.pt(5))
         // Filled as one shape and flattened before the glow, so strokes that cross do not show.
@@ -136,13 +137,13 @@ struct PhotosFace: View {
             .compositingGroup()
             .opacity(0.36)
             .shadow(color: .white.opacity(0.55), radius: metrics.pt(0.3))
-            .frame(width: metrics.pt(16.4), height: metrics.pt(89))
+            .frame(width: metrics.width * 0.164, height: metrics.height * 0.89)
             .animation(.smooth(duration: 0.4), value: value)
     }
 
     private var cornerTime: some View {
         Text(FaceText.clock(date, calendar: calendar, density: density, units: units).digits)
-            .font(.clockDigits(size: metrics.pt(density == .detailed ? 8 : 16), weight: .semibold))
+            .font(.clockDigits(size: metrics.pt(density.showsLabels ? 8 : 16), weight: .semibold))
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.4), radius: metrics.pt(0.6))
             .padding(metrics.pt(7))
@@ -154,7 +155,8 @@ struct PhotosFace: View {
             .font(.system(size: metrics.text(3.2), weight: .semibold))
             .foregroundStyle(.white)
             .shadow(color: .black.opacity(0.5), radius: metrics.pt(0.6))
-            .padding(metrics.pt(7))
+            .padding(.horizontal, metrics.pt(7))
+            .padding(.bottom, metrics.bottomBar + metrics.pt(3))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 }

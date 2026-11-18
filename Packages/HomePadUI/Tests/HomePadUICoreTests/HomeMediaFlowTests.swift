@@ -22,9 +22,28 @@ import Testing
     }
 
     @Test func roomNames_whenAccessoriesShareRooms_thenFirstSeenOrderWithoutDuplicates() {
-        #expect(snapshot.roomNames == ["Entryway", "Front Door", "Office"])
+        #expect(snapshot.roomNames == ["Entryway", "Front Door", "Office", "Living Room"])
         #expect(snapshot.accessories(inRoom: "Entryway").map(\.id) == ["a1", "a4"])
         #expect(HomeSnapshot.empty.roomNames.isEmpty)
+        let unnamed = HomeSnapshot(accessories: [HomeAccessory(id: "x", name: "Plug", roomName: "", kind: .outlet, isOn: false)])
+        #expect(unnamed.roomNames.isEmpty)
+    }
+
+    @Test func tiles_whenARoomIsChosen_thenOnlyItsCamerasAndAccessoriesAndNoScenes() {
+        #expect(snapshot.tiles(inRoom: nil).map(\.id) == ["camera.c1", "scene.s1", "scene.s2", "scene.s3", "accessory.a1", "accessory.a2", "accessory.a3", "accessory.a4", "accessory.a5", "accessory.a6"])
+        #expect(snapshot.tiles(inRoom: "Front Door").map(\.id) == ["camera.c1", "accessory.a2"])
+        #expect(snapshot.tiles(inRoom: "Office").map(\.id) == ["accessory.a3", "accessory.a5", "accessory.a6"])
+        #expect(snapshot.tiles(inRoom: "Attic").isEmpty)
+    }
+
+    @Test func models_whenBuilt_thenCarryModeColorTemperatureAndTwoWayAudio() {
+        #expect(snapshot.thermostats[0].mode == nil)
+        #expect(HomeThermostat(id: "t", name: "T", roomName: "R", currentCelsius: 20, targetCelsius: 21, mode: .cool).mode == .cool)
+        #expect(ThermostatMode.allCases.map(\.rawValue) == [0, 1, 2, 3])
+        #expect(snapshot.accessories[0].colorTemperature == nil)
+        #expect(HomeAccessory(id: "l", name: "L", roomName: "R", kind: .light, isOn: true, brightness: 50, colorTemperature: 300).colorTemperature == 300)
+        #expect(!snapshot.cameras[0].supportsTwoWayAudio)
+        #expect(HomeCamera(id: "c", name: "C", roomName: "R", supportsTwoWayAudio: true).supportsTwoWayAudio)
     }
 
     @Test func smallTiles_whenHomeHasEverything_thenCameraScenesThenReachableAccessories() {
@@ -129,6 +148,8 @@ import Testing
         let near = FlowField.parameters(position: FacePosition(x: 0.8, y: 0.2), time: 0, proximity: .near, reduceMotion: false)
         let far = FlowField.parameters(position: FacePosition(x: 0.8, y: 0.2), time: 0, proximity: .far, reduceMotion: false)
         #expect(near.focus == FlowPoint(x: 0.8, y: 0.2))
+        let mid = FlowField.parameters(position: FacePosition(x: 0.8, y: 0.2), time: 0, proximity: .mid, reduceMotion: false)
+        #expect(mid == near)
         #expect(near.pull > far.pull && far.pull > 0)
         #expect(near.scale > far.scale)
         #expect(near.amplitude < far.amplitude)

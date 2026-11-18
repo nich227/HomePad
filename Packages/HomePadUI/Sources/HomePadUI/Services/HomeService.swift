@@ -22,6 +22,12 @@ public protocol HomeService: AnyObject {
     func setBrightness(_ brightness: Int, accessoryID: String) async
     func runScene(id: String) async
     func setTargetTemperature(celsius: Double, thermostatID: String) async
+    func setThermostatMode(_ mode: ThermostatMode, thermostatID: String) async
+    /// The white of a light, in mireds, for a light that reports one.
+    func setColorTemperature(_ mireds: Int, accessoryID: String) async
+    /// Turns talking through a camera on or off, for a camera that reports two-way audio and
+    /// has a live stream open.
+    func setCameraTalk(_ isOn: Bool, cameraID: String) async
     /// A live or recent picture from a camera. `live` asks for a stream instead of snapshots.
     func cameraView(id: String, live: Bool) -> AnyView
 }
@@ -43,13 +49,13 @@ public final class PreviewHomeService: HomeService {
         homeName: "Home",
         accessories: [
             HomeAccessory(id: "lock", name: "Door Lock", roomName: "Front Door", kind: .lock, isOn: true),
-            HomeAccessory(id: "entry", name: "Lights", roomName: "Entryway", kind: .light, isOn: true, brightness: 80),
+            HomeAccessory(id: "entry", name: "Lights", roomName: "Entryway", kind: .light, isOn: true, brightness: 80, colorTemperature: 370),
             HomeAccessory(id: "bedroom", name: "Lights", roomName: "Bedroom", kind: .light, isOn: true, brightness: 40),
             HomeAccessory(id: "fan", name: "Fan", roomName: "Office", kind: .fan, isOn: true),
             HomeAccessory(id: "outlet", name: "Outlet", roomName: "Office", kind: .outlet, isOn: false),
         ],
-        scenes: [HomeScene(id: "morning", name: "Good Morning"), HomeScene(id: "night", name: "Good Night")],
-        thermostats: [HomeThermostat(id: "thermostat", name: "Thermostat", roomName: "Living Room", currentCelsius: 20, targetCelsius: 20)],
+        scenes: [HomeScene(id: "arrive", name: "Arrive Home"), HomeScene(id: "night", name: "Good Night")],
+        thermostats: [HomeThermostat(id: "thermostat", name: "Thermostat", roomName: "Living Room", currentCelsius: 20.6, targetCelsius: 20, mode: .auto)],
         cameras: [HomeCamera(id: "porch", name: "Porch", roomName: "Front Door")]
     )
 
@@ -87,6 +93,24 @@ public final class PreviewHomeService: HomeService {
         }
         snapshot.thermostats[index].targetCelsius = celsius
     }
+
+    public func setThermostatMode(_ mode: ThermostatMode, thermostatID: String) async {
+        guard let index = snapshot.thermostats.firstIndex(where: { $0.id == thermostatID }) else {
+            lastError = .unknownAccessory
+            return
+        }
+        snapshot.thermostats[index].mode = mode
+    }
+
+    public func setColorTemperature(_ mireds: Int, accessoryID: String) async {
+        guard let index = snapshot.accessories.firstIndex(where: { $0.id == accessoryID }) else {
+            lastError = .unknownAccessory
+            return
+        }
+        snapshot.accessories[index].colorTemperature = mireds
+    }
+
+    public func setCameraTalk(_ isOn: Bool, cameraID: String) async {}
 
     public func cameraView(id: String, live: Bool) -> AnyView {
         AnyView(CameraPlaceholderView())
