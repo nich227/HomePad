@@ -1,13 +1,13 @@
 # HomePad: agent guide
 
-iPadOS and iOS 26+ app. iPad is the hub, iPhone is the companion. Root: this directory.
+iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this directory.
 
 ## Invariants
 
-1. iOS and iPadOS only, deployment target 26.0. No macOS, Catalyst, visionOS, tvOS, watchOS.
-   An API newer than iOS 26.0 goes behind `if #available` with the iOS 26 behavior as the fallback.
+1. iOS and iPadOS only, deployment target 27.0. No macOS, Catalyst, visionOS, tvOS, watchOS.
+   An API newer than iOS 27.0 goes behind `if #available` with the iOS 27.0 behavior as the fallback.
    Layout adapts by size class and container size. Never branch on a device model.
-   Every `Package.swift` declares `platforms: [.iOS(.v26)]` and nothing else. Unit tests run on
+   Every `Package.swift` declares `platforms: [.iOS("27.0")]` and nothing else. Unit tests run on
    the iOS simulator through `Scripts/test-package.sh`, never on the Mac. No package has an
    executable target.
 2. Every preference is a `SettingKey` with a `SettingDescriptor`, shown by `HomePad/Settings.bundle`.
@@ -102,7 +102,9 @@ caller sets `TEST_RUNNER_<NAME>`; a test in the simulator can read and write thi
 | Write animation preview sheets | `TEST_RUNNER_HOMEPAD_ANIMATION_PREVIEW_DIR="$PWD/Packages/HomePadAnimations/Tools/preview" Scripts/test-package.sh HomePadAnimations "iPhone 18 Pro" -only-testing:HomePadAnimationsCoreTests/PreviewFrameTests` |
 | Verify the face model against its fixtures | `xcrun coremlcompiler compile HomePad/Models/FaceEmbedder.mlpackage <dir>` then `swift Scripts/verify-face-model.swift <dir>/FaceEmbedder.mlmodelc Scripts/face-model-fixtures` |
 
-Builds are capped (`nice`, `-jobs 3` or `-jobs 4`). Run one at a time. Check free memory and disk
+Builds are capped (`nice`, `-jobs 3` or `-jobs 4`). The build and test scripts take a lock
+(`Scripts/lib/lock.zsh`, held in `build/.lock`), so a second one waits for the first to finish.
+Never call `xcodebuild` for this project outside those scripts. Check free memory and disk
 before booting a simulator: the runtime is 8 GB and a booted iPad needs several GB of RAM.
 
 | Script | Simulator | Default device | Shuts it down |

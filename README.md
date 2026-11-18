@@ -3,7 +3,7 @@
 HomePad turns an iPad into a shared home screen modeled on Apple HomeView. The iPad is the **hub**.
 Each household member's iPhone runs the same app as a **companion**.
 
-iPhone and iPad only, iOS and iPadOS 26 or later. Bundle ID `com.kevster.HomePad`.
+iPhone and iPad only, iOS and iPadOS 27 or later. Bundle ID `com.kevster.HomePad`.
 
 ## What it does
 

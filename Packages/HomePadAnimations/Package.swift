@@ -5,7 +5,7 @@ let lottie = Target.Dependency.product(name: "Lottie", package: "lottie-ios")
 
 let package = Package(
     name: "HomePadAnimations",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadAnimationsCore", targets: ["HomePadAnimationsCore"]),
         .library(name: "HomePadAnimations", targets: ["HomePadAnimations"]),

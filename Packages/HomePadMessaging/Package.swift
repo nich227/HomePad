@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HomePadMessaging",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadMessagingCore", targets: ["HomePadMessagingCore"]),
         .library(name: "HomePadMessaging", targets: ["HomePadMessaging"]),

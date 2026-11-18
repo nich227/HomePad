@@ -5,7 +5,7 @@ let core = Target.Dependency.product(name: "HomePadCore", package: "HomePadCore"
 
 let package = Package(
     name: "HomePadKiosk",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadKioskCore", targets: ["HomePadKioskCore"]),
         .library(name: "HomePadKiosk", targets: ["HomePadKiosk"]),

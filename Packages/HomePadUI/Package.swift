@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HomePadUI",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadUICore", targets: ["HomePadUICore"]),
         .library(name: "HomePadUI", targets: ["HomePadUI"]),

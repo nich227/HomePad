@@ -7,7 +7,7 @@ Project root: `/Volumes/workplace/HomePad/src/HomePad`
 
 ## Invariants
 
-1. iOS and iPadOS only, deployment target 26.0. No macOS, Catalyst, visionOS, tvOS, or watchOS code paths.
+1. iOS and iPadOS only, deployment target 27.0. No macOS, Catalyst, visionOS, tvOS, or watchOS code paths.
 2. Xcode 27.2, Swift 6.4, Swift 6 language mode (strict concurrency). `swift-tools-version: 6.2`.
 3. You own exactly the directories named in your task. Do not edit anything else. Other agents are
    working in sibling directories at the same time. `Packages/HomePadCore` is read-only for you.
@@ -21,7 +21,7 @@ Project root: `/Volumes/workplace/HomePad/src/HomePad`
 7. This machine is shared and already loaded. Build and test only through the two scripts below.
    Never run `xcodebuild` with default parallelism, never run two builds at once, and never boot
    a simulator yourself. The test script boots one and shuts it down.
-8. No package declares or targets macOS. `platforms` is `[.iOS(.v26)]`, there is no executable
+8. No package declares or targets macOS. `platforms` is `[.iOS("27.0")]`, there is no executable
    target, and unit tests run on the iOS simulator. Do not use SwiftPM's command-line build, test,
    or run commands: they build for the Mac.
 
@@ -50,7 +50,7 @@ let core = Target.Dependency.product(name: "HomePadCore", package: "HomePadCore"
 
 let package = Package(
     name: "<Name>",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "<Name>Core", targets: ["<Name>Core"]),
         .library(name: "<Name>", targets: ["<Name>"]),
@@ -90,7 +90,7 @@ missing, tell me in your report and build with `-scheme <Name>-Package` using th
 the script.
 
 When you are not sure an API exists in this SDK, check the `.swiftinterface` or header under the
-SDK path before using it. Do not guess. iOS 26 and 27 APIs are fine to use (Liquid Glass
+SDK path before using it. Do not guess. iOS 27.0 APIs are fine to use, and newer ones go behind `if #available` (Liquid Glass
 `glassEffect`, SwiftUI `WebView`, and so on) once you have confirmed the symbol.
 
 ## What HomePadCore gives you (read the sources, they are short)

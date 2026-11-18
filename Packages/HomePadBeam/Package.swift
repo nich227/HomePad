@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HomePadBeam",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadBeamCore", targets: ["HomePadBeamCore"]),
         .library(name: "HomePadBeam", targets: ["HomePadBeam"]),

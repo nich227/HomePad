@@ -7,7 +7,7 @@ let features = ["HomePadKiosk", "HomePadFace", "HomePadBeam", "HomePadMessaging"
 
 let package = Package(
     name: "HomePadSettingsCatalog",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [.library(name: "HomePadSettingsCatalog", targets: ["HomePadSettingsCatalog"])],
     dependencies: [.package(path: "../HomePadCore")] + features.map { .package(path: "../\($0)") },
     targets: [
