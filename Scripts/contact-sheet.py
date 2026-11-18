@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tiles design/screenshots/*.png into one image for a quick look.
 
-Usage: Scripts/contact-sheet.py <output.jpg> [glob] [columns] [thumb width]
-Landscape captures from the UI walkthrough are stored unrotated, so each is turned upright.
+Usage: Scripts/contact-sheet.py <output.jpg> [glob] [columns] [thumb width] [--as-is]
+Landscape captures from the UI walkthrough are stored unrotated, so each tall image is turned
+on its side. Pass --as-is for captures that really are portrait, such as iPhone ones.
 """
 import glob
 import os
@@ -11,10 +12,12 @@ import sys
 from PIL import Image, ImageDraw
 
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-output = sys.argv[1]
-pattern = sys.argv[2] if len(sys.argv) > 2 else "*.png"
-columns = int(sys.argv[3]) if len(sys.argv) > 3 else 4
-width = int(sys.argv[4]) if len(sys.argv) > 4 else 500
+arguments = [argument for argument in sys.argv[1:] if argument != "--as-is"]
+as_is = "--as-is" in sys.argv[1:]
+output = arguments[0]
+pattern = arguments[1] if len(arguments) > 1 else "*.png"
+columns = int(arguments[2]) if len(arguments) > 2 else 4
+width = int(arguments[3]) if len(arguments) > 3 else 500
 
 files = sorted(glob.glob(os.path.join(root, "design", "screenshots", pattern)))
 if not files:
@@ -23,7 +26,7 @@ if not files:
 thumbs = []
 for path in files:
     image = Image.open(path).convert("RGB")
-    if image.height > image.width:
+    if image.height > image.width and not as_is:
         image = image.rotate(90, expand=True)
     height = int(image.height * width / image.width)
     thumbs.append((os.path.basename(path), image.resize((width, height))))
