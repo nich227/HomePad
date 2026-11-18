@@ -44,7 +44,7 @@ public struct MessagesHubView: View {
                     message: "Messages appear when HomePad recognizes a household member whose iPhone is nearby."
                 )
             } else {
-                ProjectionEmptyStateView(proximity: session.proximity)
+                noMessagesFromPhone(type: type)
             }
         }
         .sheet(item: $hubCompose) { compose in
@@ -68,7 +68,7 @@ public struct MessagesHubView: View {
                 .font(type.body)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .unavailable:
-            ProjectionEmptyStateView(proximity: session.proximity)
+            noMessagesFromPhone(type: type)
         case .template(let root, _, _):
             HStack(spacing: 0) {
                 sidebar(root, entry: entry, type: type)
@@ -212,6 +212,14 @@ public struct MessagesHubView: View {
         case .unavailable(.companionNotConnected):
             String(localized: "Your iPhone is not connected, so a reply cannot be sent from HomePad right now.")
         }
+    }
+
+    private func noMessagesFromPhone(type: ProjectionType) -> some View {
+        unavailable(
+            type: type,
+            title: "No Messages from Your iPhone",
+            message: "Open HomePad on your iPhone nearby. Messages show here after you set up the message relay there."
+        )
     }
 
     private func unavailable(type: ProjectionType, title: LocalizedStringKey, message: LocalizedStringKey) -> some View {
