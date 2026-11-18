@@ -19,7 +19,7 @@ iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this dir
 6. The hub listener is TLS-PSK only, runs only while the scene is active, and needs a paired
    device or an open invitation. No other listening socket exists. Do not add one without auth.
 7. Secrets and face templates live in the Keychain, this device only. Never in defaults, files, logs.
-8. Relayed message bodies stay in memory. Never persist or log them.
+8. Projected iPhone content and household notes stay in memory. Never persist or log them.
 9. One capture session uses the front camera: the face package's. The Mirror shares it.
 10. `HomePadIdentifiers` (Core) and `Config/Shared.xcconfig` must agree on bundle prefix and app group.
 11. lottie-ios is the only third-party dependency. Animation JSON is generated, not downloaded.
@@ -47,11 +47,13 @@ iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this dir
 | `Packages/HomePadUI` | Faces, Home Screen, native apps, `HubFeatureSlots`, companion shell |
 | `Packages/HomePadFace` | Camera, Vision, Core ML embedder, enrollment, recognition, liveness |
 | `Packages/HomePadBeam` | `PeerLink` (implements `PeerChannel`), pairing, beam, SharePlay, Handoff |
-| `Packages/HomePadMessaging` | Projection templates and protocol, message relay, App Intents, notes |
+| `Packages/HomePadMessaging` | Projection templates and protocol (Calendar, Reminders, Now Playing), App Intents, household notes |
+| `Packages/HomePadAssistant` | Apple Intelligence gate, the in-app Assistant (model, speech, overlay), hub actions as App Intents |
+| `HomePad/HubAssistantBridge.swift` | Implements the Assistant's actions and context over the hub's services |
 | `Packages/HomePadKiosk` | Kiosk state machine, Single App Mode, passcode prompt |
 | `Packages/HomePadAnimations` | Lottie wrapper, generated animations, `Tools/generate_animations.py` |
 | `Packages/HomePadSettingsCatalog` | All descriptors, Settings bundle writer, the test that writes `Settings.bundle` |
-| `docs/` | `UI`, `FACE_RECOGNITION`, `FACE_MODEL`, `BEAM`, `MESSAGING`, `KIOSK`, `ANIMATIONS` |
+| `docs/` | `UI`, `FACE_RECOGNITION`, `FACE_MODEL`, `BEAM`, `MESSAGING`, `ASSISTANT`, `KIOSK`, `ANIMATIONS`, `DESIGN_SPEC` |
 
 Each feature package has `<Name>Core` (pure logic, unit-tested, 100% line coverage) and `<Name>`
 (iOS frameworks, SwiftUI, no unit tests). Put decisions in Core. Both targets are always in the
