@@ -12,8 +12,6 @@ public final class ProjectionHost {
     public private(set) var connectedHubs: [PeerDevice] = []
     /// The apps being projected, after the Settings switches were applied.
     public private(set) var projectedApps: [ProjectedApp] = []
-    /// The Messages app, for presenting replies that wait for the owner.
-    public let messages: MessagesAppProvider
 
     @ObservationIgnored private let channel: any PeerChannel
     @ObservationIgnored private let settings: HomePadSettings
@@ -28,7 +26,7 @@ public final class ProjectionHost {
     @ObservationIgnored private var isRunning = false
     @ObservationIgnored private var lastFullFlush = Date.distantPast
     /// How often every app's screens are rebuilt even without a change notice, so that events
-    /// that have ended and messages past retention drop off.
+    /// that have ended drop off.
     @ObservationIgnored private let fullFlushInterval: TimeInterval = 60
     @ObservationIgnored private var outbox: AsyncStream<Outgoing>.Continuation?
 
@@ -38,22 +36,19 @@ public final class ProjectionHost {
         let completion: (@Sendable (Bool) -> Void)?
     }
 
-    /// `providers` replaces the built-in Calendar, Reminders, and Now Playing apps. Messages is
-    /// always present. Which of them are projected follows the switches in Settings.
+    /// `providers` replaces the built-in Calendar, Reminders, and Now Playing apps. Which of the
+    /// built-in ones are projected follows the switches in Settings.
     public init(
         channel: any PeerChannel,
         settings: HomePadSettings,
         providers: [any ProjectedAppProvider]? = nil,
-        notifier: (any HomePadNotifying)? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.channel = channel
         self.settings = settings
         self.now = now
         self.state = ProjectionHostState(session: UUID())
-        let owner = channel.localDevice.profileID ?? channel.localDevice.id
-        self.messages = MessagesAppProvider(ownerID: owner, settings: settings, notifier: notifier ?? LocalNotifier(), now: now)
-        self.providers = [messages] + (providers ?? [CalendarAppProvider(now: now), RemindersAppProvider(now: now), NowPlayingAppProvider()])
+        self.providers = providers ?? [CalendarAppProvider(now: now), RemindersAppProvider(now: now), NowPlayingAppProvider()]
     }
 
     // MARK: Lifecycle
@@ -119,37 +114,10 @@ public final class ProjectionHost {
             for app in state.apps {
                 await flush(appID: app.id)
             }
-        } else if state.apps.contains(where: { $0.id == messages.app.id }) {
-            // Cheap, and it picks up a changed preview or retention setting.
-            await flush(appID: messages.app.id)
         }
     }
 
     // MARK: Intents
-
-    /// Takes a message from the Shortcuts automation, adds it to the Messages app, and sends the
-    /// update to a hub, waiting a short time for one to connect.
-    public func relayMessage(senderName: String, handle: String?, text: String) async -> MessageRelayOutcome {
-        guard settings[MessagingSettings.projectMessages] else { return .disabled }
-        start()
-        await syncProviders()
-        switch messages.receive(senderName: senderName, handle: handle, text: text) {
-        case .failure(let error):
-            return .rejected(error)
-        case .success(.duplicate):
-            return .duplicate
-        case .success(.expired):
-            return .keptForLater
-        case .success(.inserted):
-            break
-        }
-        let reached = await flush(appID: messages.app.id)
-        if !reached.isEmpty {
-            return .delivered(hubCount: reached.count)
-        }
-        let delivered = await waitForHub()
-        return delivered > 0 ? .delivered(hubCount: delivered) : .keptForLater
-    }
 
     /// Asks every connected hub to bring one of this iPhone's apps to the front.
     public func present(appID: String) async -> HubCommandOutcome {
@@ -172,14 +140,12 @@ public final class ProjectionHost {
 
     private func syncProviders() async {
         let enabled = MessagingSettings.enabledAppIDs(
-            messages: settings[MessagingSettings.projectMessages],
             calendar: settings[MessagingSettings.projectCalendar],
             reminders: settings[MessagingSettings.projectReminders],
             nowPlaying: settings[MessagingSettings.projectNowPlaying]
         )
         let builtIn: Set<String> = [
-            BuiltInProjectedApp.messagesID, BuiltInProjectedApp.calendarID,
-            BuiltInProjectedApp.remindersID, BuiltInProjectedApp.nowPlayingID,
+            BuiltInProjectedApp.calendarID, BuiltInProjectedApp.remindersID, BuiltInProjectedApp.nowPlayingID,
         ]
         for provider in providers {
             let appID = provider.app.id
@@ -312,8 +278,6 @@ public final class ProjectionHost {
             if let message = try? state.pop(appID: appID) {
                 _ = enqueue(message)
             }
-        case .reply(let conversationID, let text, _):
-            await messages.queueReply(conversationID: conversationID, text: text)
         case .mediaCommand(let command, _):
             provider(appID: BuiltInProjectedApp.nowPlayingID)?.handle(mediaCommand: command)
         }

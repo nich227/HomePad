@@ -5,15 +5,11 @@ import UserNotifications
 /// Posts local notifications on a companion. Notification text is never logged.
 @MainActor
 public protocol HomePadNotifying: AnyObject {
-    /// A reply typed on the hub is waiting for its owner to review and send.
-    func postPendingReply(recipientName: String, identifier: String) async
     func postHouseholdNote(senderName: String, text: String, identifier: String) async
-    func removeDelivered(identifier: String)
 }
 
 @MainActor
 public final class LocalNotifier: HomePadNotifying {
-    public static let pendingReplyCategory = "homepad.pendingReply"
     public static let householdNoteCategory = "homepad.householdNote"
 
     private let center: UNUserNotificationCenter
@@ -28,15 +24,6 @@ public final class LocalNotifier: HomePadNotifying {
         (try? await center.requestAuthorization(options: [.alert, .sound])) ?? false
     }
 
-    public func postPendingReply(recipientName: String, identifier: String) async {
-        let content = UNMutableNotificationContent()
-        content.title = String(localized: "Reply from HomePad")
-        content.body = String(localized: "Tap to review and send your reply to \(recipientName).")
-        content.sound = .default
-        content.categoryIdentifier = Self.pendingReplyCategory
-        await post(content, identifier: identifier)
-    }
-
     public func postHouseholdNote(senderName: String, text: String, identifier: String) async {
         let content = UNMutableNotificationContent()
         content.title = senderName
@@ -45,11 +32,6 @@ public final class LocalNotifier: HomePadNotifying {
         content.categoryIdentifier = Self.householdNoteCategory
         content.threadIdentifier = Self.householdNoteCategory
         await post(communicationContent(from: content, senderName: senderName, text: text), identifier: identifier)
-    }
-
-    public func removeDelivered(identifier: String) {
-        center.removeDeliveredNotifications(withIdentifiers: [identifier])
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 
     private func post(_ content: UNNotificationContent, identifier: String) async {

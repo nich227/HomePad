@@ -6,21 +6,20 @@ import Testing
     let codec = ProjectionCodec()
 
     private static let hostMessages: [HostToHubMessage] = [
-        .announce([Fixture.app("messages"), Fixture.app("nowPlaying", personal: false)]),
-        .setRoot(appID: "messages", template: Fixture.allTemplates[3]),
-        .push(appID: "messages", template: Fixture.allTemplates[4]),
-        .pop(appID: "messages"),
-        .update(appID: "messages", template: Fixture.allTemplates[2]),
-        .withdraw(appID: "messages"),
-        .present(appID: "messages"),
+        .announce([Fixture.app("calendar"), Fixture.app("nowPlaying", personal: false)]),
+        .setRoot(appID: "calendar", template: Fixture.allTemplates[3]),
+        .push(appID: "calendar", template: Fixture.allTemplates[4]),
+        .pop(appID: "calendar"),
+        .update(appID: "calendar", template: Fixture.allTemplates[2]),
+        .withdraw(appID: "calendar"),
+        .present(appID: "calendar"),
     ]
 
     private static let hubMessages: [HubToHostMessage] = [
         .hello,
-        .launch(appID: "messages"),
-        .action(appID: "messages", actionID: "messages.open.c1", payload: ["value": "true"]),
-        .action(appID: "messages", actionID: ProjectionReservedAction.back, payload: [:]),
-        .reply(conversationID: "c1", text: "On my way"),
+        .launch(appID: "calendar"),
+        .action(appID: "calendar", actionID: "calendar.open.e1", payload: ["value": "true"]),
+        .action(appID: "calendar", actionID: ProjectionReservedAction.back, payload: [:]),
         .mediaCommand(.nextTrack),
     ]
 
@@ -98,7 +97,7 @@ import Testing
         #expect(throws: ProjectionWireError.malformed) { try codec.decodeHostFrame(data) }
     }
 
-    @Test(arguments: ["launch", "action", "reply", "mediaCommand"])
+    @Test(arguments: ["launch", "action", "mediaCommand"])
     func decodeHubFrame_whenRequiredFieldMissing_thenMalformed(type: String) throws {
         let data = try json(["version": 1, "session": Fixture.hubSession.uuidString, "sequence": 1, "type": type])
         #expect(throws: ProjectionWireError.malformed) { try codec.decodeHubFrame(data) }
@@ -112,13 +111,10 @@ import Testing
         }
     }
 
-    @Test func decodeHubFrame_whenActionOrReplyIsMissingOneField_thenMalformed() throws {
+    @Test func decodeHubFrame_whenActionIsMissingOneField_thenMalformed() throws {
         var action = try object(codec.encode(Fixture.hubFrame(.action(appID: "a", actionID: "x", payload: [:]), sequence: 1)))
         action["actionID"] = nil
         #expect(throws: ProjectionWireError.malformed) { try codec.decodeHubFrame(json(action)) }
-        var reply = try object(codec.encode(Fixture.hubFrame(.reply(conversationID: "c", text: "Hi"), sequence: 1)))
-        reply["text"] = nil
-        #expect(throws: ProjectionWireError.malformed) { try codec.decodeHubFrame(json(reply)) }
     }
 
     @Test func decodeHubFrame_whenActionHasNoPayload_thenPayloadIsEmpty() throws {
@@ -140,9 +136,26 @@ import Testing
     }
 
     @Test func decodeHubFrame_whenContentBreaksLimits_thenInvalid() throws {
-        var frame = try object(codec.encode(Fixture.hubFrame(.reply(conversationID: "c", text: "Hi"), sequence: 1)))
-        frame["text"] = "   "
-        #expect(throws: ProjectionWireError.invalid(.emptyText(field: "reply.text"))) { try codec.decodeHubFrame(json(frame)) }
+        var frame = try object(codec.encode(Fixture.hubFrame(.action(appID: "a", actionID: "x", payload: [:]), sequence: 1)))
+        frame["actionID"] = "has space"
+        #expect(throws: ProjectionWireError.invalid(.invalidIdentifier(field: "actionID"))) { try codec.decodeHubFrame(json(frame)) }
+    }
+
+    // MARK: Frames from a build that still relayed messages
+
+    @Test func decodeHubFrame_whenTypeIsTheRemovedReply_thenUnknownMessageType() throws {
+        let data = try json([
+            "version": 1, "session": Fixture.hubSession.uuidString, "sequence": 1,
+            "type": "reply", "conversationID": "c1", "text": "On my way",
+        ])
+        #expect(throws: ProjectionWireError.unknownMessageType) { try codec.decodeHubFrame(data) }
+    }
+
+    @Test(arguments: ["conversationList", "conversation"])
+    func decodeHostFrame_whenTemplateIsARemovedCase_thenMalformed(removedCase: String) throws {
+        var frame = try object(codec.encode(Fixture.hostFrame(.setRoot(appID: "a", template: Fixture.list()), sequence: 1)))
+        frame["template"] = [removedCase: ["_0": ["id": "t", "title": "T"]]]
+        #expect(throws: ProjectionWireError.malformed) { try codec.decodeHostFrame(json(frame)) }
     }
 
     @Test func encode_whenMessageBreaksLimits_thenInvalid() {
@@ -163,13 +176,13 @@ import Testing
         var limits = ProjectionLimits()
         limits.maxPayloadBytes = 200
         let small = ProjectionCodec(limits: limits)
-        let frame = Fixture.hostFrame(.setRoot(appID: "a", template: Fixture.allTemplates[6]), sequence: 1)
+        let frame = Fixture.hostFrame(.setRoot(appID: "a", template: Fixture.allTemplates[4]), sequence: 1)
         #expect(throws: ProjectionWireError.payloadTooLarge(limit: 200)) { try small.encode(frame) }
         #expect(small.limits == limits)
     }
 
     @Test func decode_whenDataExceedsPayloadCap_thenFailsWithoutParsing() throws {
-        let data = try codec.encode(Fixture.hostFrame(.setRoot(appID: "a", template: Fixture.allTemplates[6]), sequence: 1))
+        let data = try codec.encode(Fixture.hostFrame(.setRoot(appID: "a", template: Fixture.allTemplates[4]), sequence: 1))
         var limits = ProjectionLimits()
         limits.maxPayloadBytes = data.count - 1
         #expect(throws: ProjectionWireError.payloadTooLarge(limit: data.count - 1)) { try ProjectionCodec(limits: limits).decodeHostFrame(data) }

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Wraps content that may live in memory but must never be written to disk, a log, or a crash
-/// report: message bodies and anything else that belongs to one household member.
+/// report: projected screens and anything else that belongs to one household member.
 ///
 /// The wrapper has no `Codable` conformance and declares that it never will, so a type that stores
 /// one cannot be given a synthesized `Codable` conformance and saved. Printing, string

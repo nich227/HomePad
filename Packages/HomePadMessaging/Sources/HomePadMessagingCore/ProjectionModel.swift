@@ -160,80 +160,6 @@ public struct NowPlayingTemplate: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
-public struct ProjectedConversationSummary: Codable, Sendable, Equatable, Identifiable {
-    /// The conversation id, also used for replies.
-    public let id: String
-    public var title: String
-    /// `nil` when the companion's owner chose to show the sender only.
-    public var preview: String?
-    public var lastMessageAt: Date
-    public var unreadCount: Int
-    public var actionID: String
-
-    public init(id: String, title: String, preview: String?, lastMessageAt: Date, unreadCount: Int, actionID: String) {
-        self.id = id
-        self.title = title
-        self.preview = preview
-        self.lastMessageAt = lastMessageAt
-        self.unreadCount = unreadCount
-        self.actionID = actionID
-    }
-}
-
-public struct ConversationListTemplate: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public var title: String
-    public var conversations: [ProjectedConversationSummary]
-    public var emptyMessage: String?
-
-    public init(id: String, title: String, conversations: [ProjectedConversationSummary], emptyMessage: String? = nil) {
-        self.id = id
-        self.title = title
-        self.conversations = conversations
-        self.emptyMessage = emptyMessage
-    }
-}
-
-public struct ProjectedBubble: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public var text: String
-    public var isFromMe: Bool
-    public var sentAt: Date
-
-    public init(id: String, text: String, isFromMe: Bool, sentAt: Date) {
-        self.id = id
-        self.text = text
-        self.isFromMe = isFromMe
-        self.sentAt = sentAt
-    }
-}
-
-public struct ConversationTemplate: Codable, Sendable, Equatable, Identifiable {
-    public let id: String
-    public var title: String
-    public var conversationID: String
-    /// Phone number or email a reply should go to, when the relay supplied one.
-    public var recipientHandle: String?
-    public var bubbles: [ProjectedBubble]
-    public var canReply: Bool
-
-    public init(
-        id: String,
-        title: String,
-        conversationID: String,
-        recipientHandle: String? = nil,
-        bubbles: [ProjectedBubble],
-        canReply: Bool
-    ) {
-        self.id = id
-        self.title = title
-        self.conversationID = conversationID
-        self.recipientHandle = recipientHandle
-        self.bubbles = bubbles
-        self.canReply = canReply
-    }
-}
-
 public struct InformationItem: Codable, Sendable, Equatable, Identifiable {
     public let id: String
     public var label: String
@@ -314,7 +240,7 @@ public struct AgendaTemplate: Codable, Sendable, Equatable, Identifiable {
 }
 
 public enum ProjectionTemplateKind: String, Sendable, CaseIterable {
-    case list, grid, nowPlaying, conversationList, conversation, information, agenda
+    case list, grid, nowPlaying, information, agenda
 }
 
 /// One screen of a projected app. The set of cases is the whole vocabulary: a companion cannot
@@ -323,8 +249,6 @@ public enum ProjectionTemplate: Codable, Sendable, Equatable, Identifiable {
     case list(ListTemplate)
     case grid(GridTemplate)
     case nowPlaying(NowPlayingTemplate)
-    case conversationList(ConversationListTemplate)
-    case conversation(ConversationTemplate)
     case information(InformationTemplate)
     case agenda(AgendaTemplate)
 
@@ -333,8 +257,6 @@ public enum ProjectionTemplate: Codable, Sendable, Equatable, Identifiable {
         case .list(let template): template.id
         case .grid(let template): template.id
         case .nowPlaying(let template): template.id
-        case .conversationList(let template): template.id
-        case .conversation(let template): template.id
         case .information(let template): template.id
         case .agenda(let template): template.id
         }
@@ -345,8 +267,6 @@ public enum ProjectionTemplate: Codable, Sendable, Equatable, Identifiable {
         case .list(let template): template.title
         case .grid(let template): template.title
         case .nowPlaying(let template): template.title
-        case .conversationList(let template): template.title
-        case .conversation(let template): template.title
         case .information(let template): template.title
         case .agenda(let template): template.title
         }
@@ -357,8 +277,6 @@ public enum ProjectionTemplate: Codable, Sendable, Equatable, Identifiable {
         case .list: .list
         case .grid: .grid
         case .nowPlaying: .nowPlaying
-        case .conversationList: .conversationList
-        case .conversation: .conversation
         case .information: .information
         case .agenda: .agenda
         }

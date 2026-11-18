@@ -20,8 +20,8 @@ enum Fixture {
     static let aliceManual = ViewerContext(activeProfileID: alice, isPersonalContentUnlocked: false)
     static let bobVerified = ViewerContext(activeProfileID: bob, isPersonalContentUnlocked: true)
 
-    static func app(_ id: String = "messages", personal: Bool = true) -> ProjectedApp {
-        ProjectedApp(id: id, name: id.capitalized, symbolName: "message.fill", tint: .green, category: .communication, requiresPersonalContent: personal)
+    static func app(_ id: String = "calendar", personal: Bool = true) -> ProjectedApp {
+        ProjectedApp(id: id, name: id.capitalized, symbolName: "calendar", tint: .red, category: .productivity, requiresPersonalContent: personal)
     }
 
     static func row(_ id: String = "r1", title: String = "Row") -> ProjectionRow {
@@ -40,28 +40,10 @@ enum Fixture {
         ProjectionFrame(session: session, sequence: sequence, message: message)
     }
 
-    static func message(
-        _ text: String = "Hello",
-        from sender: String = "Carol",
-        handle: String? = "+1 (555) 010-0000",
-        at date: Date = t0,
-        direction: MessageDirection = .incoming,
-        id: UUID = UUID()
-    ) -> RelayedMessage {
-        // The inputs here are never blank.
-        try! RelayedMessage(id: id, senderName: sender, handle: handle, text: text, receivedAt: date, direction: direction)
-    }
-
     static let allTemplates: [ProjectionTemplate] = [
         list(),
         .grid(GridTemplate(id: "grid", title: "Grid", buttons: [ProjectionButton(id: "b1", title: "Go", symbolName: "play", actionID: "go")])),
         .nowPlaying(NowPlayingTemplate(id: "np", title: "Song", artist: "Artist", album: "Album", artwork: Data([1, 2, 3]), elapsed: 10, duration: 100, isPlaying: true, commands: [.pause, .nextTrack])),
-        .conversationList(ConversationListTemplate(id: "cl", title: "Messages", conversations: [
-            ProjectedConversationSummary(id: "c1", title: "Carol", preview: "Hi", lastMessageAt: t0, unreadCount: 1, actionID: "messages.open.c1"),
-        ], emptyMessage: "No messages")),
-        .conversation(ConversationTemplate(id: "conv", title: "Carol", conversationID: "c1", recipientHandle: "+15550100000", bubbles: [
-            ProjectedBubble(id: "m1", text: "Hi", isFromMe: false, sentAt: t0),
-        ], canReply: true)),
         .information(InformationTemplate(id: "info", title: "Info", items: [InformationItem(id: "i1", label: "Label", value: "Value")], buttons: [ProjectionButton(id: "b1", title: "Allow", actionID: "allow")])),
         .agenda(AgendaTemplate(id: "agenda", title: "Today", entries: [
             AgendaEntry(id: "e1", kind: .event, title: "Lunch", start: t0, end: t0.addingTimeInterval(3600), detail: "Cafe"),

@@ -16,8 +16,8 @@ import Testing
     }
 
     @Test func templateAccessors_whenAnyCase_thenReportIdentityTitleAndKind() {
-        #expect(Fixture.allTemplates.map(\.id) == ["root", "grid", "np", "cl", "conv", "info", "agenda"])
-        #expect(Fixture.allTemplates.map(\.title) == ["List", "Grid", "Song", "Messages", "Carol", "Info", "Today"])
+        #expect(Fixture.allTemplates.map(\.id) == ["root", "grid", "np", "info", "agenda"])
+        #expect(Fixture.allTemplates.map(\.title) == ["List", "Grid", "Song", "Info", "Today"])
         #expect(Fixture.allTemplates.map(\.kind) == ProjectionTemplateKind.allCases)
     }
 
@@ -170,39 +170,6 @@ import Testing
         expect(.nowPlaying(NowPlayingTemplate(id: "n", title: "T", commands: [.play, .play])), fails: .duplicateIdentifier(field: "nowPlaying.commands"))
     }
 
-    // MARK: Conversations
-
-    @Test func validateConversationList_whenInvalid_thenFails() {
-        func list(_ conversations: [ProjectedConversationSummary], empty: String? = nil) -> ProjectionTemplate {
-            .conversationList(ConversationListTemplate(id: "cl", title: "M", conversations: conversations, emptyMessage: empty))
-        }
-        func summary(id: String = "c", title: String = "Carol", preview: String? = "Hi", unread: Int = 0, action: String = "open") -> ProjectedConversationSummary {
-            ProjectedConversationSummary(id: id, title: title, preview: preview, lastMessageAt: Fixture.t0, unreadCount: unread, actionID: action)
-        }
-        expect(list((0..<21).map { summary(id: "c\($0)") }), fails: .tooManyItems(field: "conversations", limit: 20))
-        expect(list([summary(), summary()]), fails: .duplicateIdentifier(field: "conversation.id"))
-        expect(list([], empty: String(repeating: "e", count: 161)), fails: .textTooLong(field: "conversations.emptyMessage", limit: 160))
-        expect(list([summary(id: "")]), fails: .invalidIdentifier(field: "conversation.id"))
-        expect(list([summary(title: "")]), fails: .emptyText(field: "conversation.title"))
-        expect(list([summary(preview: String(repeating: "p", count: 161))]), fails: .textTooLong(field: "conversation.preview", limit: 160))
-        expect(list([summary(action: "")]), fails: .invalidIdentifier(field: "conversation.actionID"))
-        expect(list([summary(unread: -1)]), fails: .invalidCount(field: "conversation.unreadCount"))
-    }
-
-    @Test func validateConversation_whenInvalid_thenFails() {
-        func conversation(id: String = "c1", handle: String? = nil, bubbles: [ProjectedBubble]) -> ProjectionTemplate {
-            .conversation(ConversationTemplate(id: "conv", title: "Carol", conversationID: id, recipientHandle: handle, bubbles: bubbles, canReply: true))
-        }
-        func bubble(_ id: String = "m", text: String = "Hi") -> ProjectedBubble { ProjectedBubble(id: id, text: text, isFromMe: false, sentAt: Fixture.t0) }
-        expect(conversation(id: "", bubbles: []), fails: .invalidIdentifier(field: "conversation.conversationID"))
-        expect(conversation(handle: String(repeating: "h", count: 129), bubbles: []), fails: .textTooLong(field: "conversation.recipientHandle", limit: 128))
-        expect(conversation(bubbles: (0..<41).map { bubble("m\($0)") }), fails: .tooManyItems(field: "conversation.bubbles", limit: 40))
-        expect(conversation(bubbles: [bubble(), bubble()]), fails: .duplicateIdentifier(field: "bubble.id"))
-        expect(conversation(bubbles: [bubble("")]), fails: .invalidIdentifier(field: "bubble.id"))
-        expect(conversation(bubbles: [bubble(text: " ")]), fails: .emptyText(field: "bubble.text"))
-        expect(conversation(bubbles: [bubble(text: String(repeating: "b", count: 2001))]), fails: .textTooLong(field: "bubble.text", limit: 2000))
-    }
-
     // MARK: Information and agenda
 
     @Test func validateInformation_whenInvalid_thenFails() {
@@ -238,9 +205,8 @@ import Testing
     // MARK: Hub actions
 
     @Test func validateAction_whenValid_thenPasses() throws {
-        try validator.validate(appID: "messages")
+        try validator.validate(appID: "calendar")
         try validator.validate(actionID: "open.1", payload: ["value": "true"])
-        try validator.validate(conversationID: "c1", replyText: "On my way")
     }
 
     @Test func validateAction_whenInvalid_thenFails() {
@@ -251,14 +217,6 @@ import Testing
         #expect(throws: Failure.invalidIdentifier(field: "action.payload.key")) { try validator.validate(actionID: "a", payload: ["bad key": "v"]) }
         #expect(throws: Failure.textTooLong(field: "action.payload.value", limit: 2000)) {
             try validator.validate(actionID: "a", payload: ["k": String(repeating: "v", count: 2001)])
-        }
-    }
-
-    @Test func validateReply_whenInvalid_thenFails() {
-        #expect(throws: Failure.invalidIdentifier(field: "conversationID")) { try validator.validate(conversationID: "", replyText: "Hi") }
-        #expect(throws: Failure.emptyText(field: "reply.text")) { try validator.validate(conversationID: "c", replyText: " \n ") }
-        #expect(throws: Failure.textTooLong(field: "reply.text", limit: 2000)) {
-            try validator.validate(conversationID: "c", replyText: String(repeating: "r", count: 2001))
         }
     }
 

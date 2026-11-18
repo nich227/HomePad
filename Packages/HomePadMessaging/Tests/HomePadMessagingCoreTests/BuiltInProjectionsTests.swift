@@ -2,86 +2,6 @@ import Foundation
 import Testing
 @testable import HomePadMessagingCore
 
-@Suite struct MessagesProjectionTests {
-    private func inbox() -> MessageInbox {
-        var inbox = MessageInbox()
-        inbox.insert(Fixture.message("First", from: "Carol", at: Fixture.t0), for: Fixture.alice, now: Fixture.t0)
-        inbox.insert(Fixture.message("Reply", from: "Carol", at: Fixture.t0.addingTimeInterval(10), direction: .outgoing), for: Fixture.alice, now: Fixture.t0.addingTimeInterval(10))
-        inbox.insert(Fixture.message("Yo", from: "Dave", handle: nil, at: Fixture.t0.addingTimeInterval(20)), for: Fixture.alice, now: Fixture.t0.addingTimeInterval(20))
-        return inbox
-    }
-
-    @Test func identifiers_whenRoundTripped_thenRecoverTheConversationID() {
-        #expect(MessagesProjection.conversationID(fromActionID: MessagesProjection.openActionID(conversationID: "abc")) == "abc")
-        #expect(MessagesProjection.conversationID(fromTemplateID: MessagesProjection.conversationTemplateID(conversationID: "abc")) == "abc")
-    }
-
-    @Test func identifiers_whenPrefixIsWrongOrSuffixEmpty_thenNil() {
-        #expect(MessagesProjection.conversationID(fromActionID: "agenda.toggle.x") == nil)
-        #expect(MessagesProjection.conversationID(fromActionID: "messages.open.") == nil)
-        #expect(MessagesProjection.conversationID(fromTemplateID: "messages.list") == nil)
-    }
-
-    @Test func listTemplate_whenPreviewsOn_thenShowsLatestTextAndValidates() throws {
-        let template = MessagesProjection.listTemplate(conversations: inbox().conversations(for: Fixture.alice), title: "Messages", emptyMessage: "No messages", showsPreviews: true)
-        try ProjectionValidator().validate(template)
-        guard case .conversationList(let list) = template else { Issue.record("wrong case"); return }
-        #expect(list.id == MessagesProjection.rootTemplateID)
-        #expect(list.conversations.map(\.title) == ["Dave", "Carol"])
-        #expect(list.conversations.map(\.preview) == ["Yo", "Reply"])
-        #expect(list.conversations.map(\.unreadCount) == [1, 1])
-        #expect(list.conversations[0].actionID == MessagesProjection.openActionID(conversationID: list.conversations[0].id))
-        #expect(list.emptyMessage == "No messages")
-    }
-
-    @Test func listTemplate_whenPreviewsOff_thenNoMessageTextLeavesThePhone() throws {
-        let template = MessagesProjection.listTemplate(conversations: inbox().conversations(for: Fixture.alice), title: "Messages", emptyMessage: "No messages", showsPreviews: false)
-        guard case .conversationList(let list) = template else { Issue.record("wrong case"); return }
-        #expect(list.conversations.allSatisfy { $0.preview == nil })
-        let encoded = try #require(String(data: JSONEncoder().encode(template), encoding: .utf8))
-        #expect(!encoded.contains("Yo") && !encoded.contains("Reply") && !encoded.contains("First"))
-    }
-
-    @Test func listTemplate_whenMoreConversationsThanLimit_thenKeepsTheNewest() throws {
-        var inbox = MessageInbox()
-        for index in 0..<25 {
-            inbox.insert(Fixture.message("m", from: "Sender \(index)", handle: nil, at: Fixture.t0.addingTimeInterval(Double(index))), for: Fixture.alice, now: Fixture.t0.addingTimeInterval(30))
-        }
-        let template = MessagesProjection.listTemplate(conversations: inbox.conversations(for: Fixture.alice), title: "Messages", emptyMessage: "", showsPreviews: true)
-        try ProjectionValidator().validate(template)
-        guard case .conversationList(let list) = template else { Issue.record("wrong case"); return }
-        #expect(list.conversations.count == 20)
-        #expect(list.conversations.first?.title == "Sender 24")
-    }
-
-    @Test func conversationTemplate_whenBuilt_thenBubblesAreOldestFirstAndValidates() throws {
-        let conversation = try #require(inbox().conversations(for: Fixture.alice).first { $0.title == "Carol" })
-        let template = MessagesProjection.conversationTemplate(conversation, canReply: true)
-        try ProjectionValidator().validate(template)
-        guard case .conversation(let value) = template else { Issue.record("wrong case"); return }
-        #expect(value.id == MessagesProjection.conversationTemplateID(conversationID: conversation.id))
-        #expect(value.conversationID == conversation.id)
-        #expect(value.bubbles.map(\.text) == ["First", "Reply"])
-        #expect(value.bubbles.map(\.isFromMe) == [false, true])
-        #expect(value.recipientHandle == "+1 (555) 010-0000")
-        #expect(value.canReply)
-    }
-
-    @Test func conversationTemplate_whenMoreMessagesThanLimit_thenKeepsTheNewest() throws {
-        var inbox = MessageInbox()
-        for index in 0..<45 {
-            inbox.insert(Fixture.message("m\(index)", at: Fixture.t0.addingTimeInterval(Double(index) * 10)), for: Fixture.alice, now: Fixture.t0.addingTimeInterval(500))
-        }
-        let template = MessagesProjection.conversationTemplate(inbox.conversations(for: Fixture.alice)[0], canReply: false)
-        try ProjectionValidator().validate(template)
-        guard case .conversation(let value) = template else { Issue.record("wrong case"); return }
-        #expect(value.bubbles.count == 40)
-        #expect(value.bubbles.first?.text == "m5")
-        #expect(value.bubbles.last?.text == "m44")
-        #expect(!value.canReply)
-    }
-}
-
 @Suite struct AgendaProjectionTests {
     /// Also checks that the hub would accept what the builder produced.
     private func build(_ items: [AgendaItem], now: Date = Fixture.t0) throws -> AgendaTemplate {
@@ -94,7 +14,7 @@ import Testing
     @Test func toggleActionID_whenRoundTripped_thenRecoversItemID() {
         #expect(AgendaProjection.itemID(fromToggleActionID: AgendaProjection.toggleActionID(itemID: "abc")) == "abc")
         #expect(AgendaProjection.itemID(fromToggleActionID: "agenda.toggle.") == nil)
-        #expect(AgendaProjection.itemID(fromToggleActionID: "messages.open.abc") == nil)
+        #expect(AgendaProjection.itemID(fromToggleActionID: "other.toggle.abc") == nil)
     }
 
     @Test func template_whenItemsUnordered_thenSortedByStartWithUndatedLast() throws {

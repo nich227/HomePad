@@ -22,12 +22,16 @@ import Testing
         #expect(Mirror(reflecting: wrapped).children.isEmpty)
     }
 
-    @Test func mirror_whenContainerIsDumped_thenBodyIsNotShown() {
-        let message = Fixture.message("the secret body")
+    @Test func mirror_whenContainerIsDumped_thenContentIsNotShown() throws {
+        var state = ProjectionClientState(session: Fixture.hubSession)
+        try state.apply(Fixture.hostFrame(.announce([Fixture.app()]), sequence: 1), from: Fixture.phone, now: Fixture.t0)
+        try state.apply(Fixture.hostFrame(.setRoot(appID: "calendar", template: Fixture.list(title: "the secret title")), sequence: 2), from: Fixture.phone, now: Fixture.t0)
         var output = ""
-        dump(message, to: &output)
+        dump(state, to: &output)
         #expect(!output.contains("secret"))
-        #expect(!"\(message)".contains("secret"))
+        #expect(!"\(state)".contains("secret"))
+        let entry = ProjectedAppEntryID(deviceID: Fixture.phoneID, appID: "calendar")
+        #expect(state.content(for: entry, viewer: Fixture.aliceVerified) == .template(Fixture.list(title: "the secret title"), receivedAt: Fixture.t0, depth: 1))
     }
 
     @Test func mutate_whenBodyChangesValue_thenValueIsUpdated() {

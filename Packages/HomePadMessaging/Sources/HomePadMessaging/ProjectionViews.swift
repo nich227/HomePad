@@ -274,8 +274,6 @@ public struct ProjectionTemplateView: View {
         case .list(let list): listView(list)
         case .grid(let grid): gridView(grid)
         case .nowPlaying(let nowPlaying): NowPlayingTemplateView(template: nowPlaying, receivedAt: receivedAt, type: type, onCommand: onMediaCommand)
-        case .conversationList(let list): conversationListView(list)
-        case .conversation(let conversation): ConversationBubblesView(template: conversation, type: type)
         case .information(let information): informationView(information)
         case .agenda(let agenda): agendaView(agenda)
         }
@@ -389,30 +387,6 @@ public struct ProjectionTemplateView: View {
                 }
             }
             .padding(24)
-        }
-    }
-
-    // MARK: Conversation list
-
-    @ViewBuilder
-    private func conversationListView(_ list: ConversationListTemplate) -> some View {
-        if list.conversations.isEmpty {
-            emptyMessage(list.emptyMessage)
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: type.rowSpacing) {
-                    ForEach(list.conversations) { conversation in
-                        Button {
-                            onAction(conversation.actionID, [:])
-                        } label: {
-                            ConversationRow(conversation: conversation, type: type)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-                .padding(24)
-            }
         }
     }
 
@@ -530,71 +504,6 @@ public struct ProjectionTemplateView: View {
             .multilineTextAlignment(.center)
             .padding(32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-struct ConversationRow: View {
-    let conversation: ProjectedConversationSummary
-    let type: ProjectionType
-    var isSelected = false
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Circle()
-                .fill(conversation.unreadCount > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
-                .frame(width: 12, height: 12)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(conversation.title).font(type.body.weight(.semibold)).lineLimit(1)
-                    Spacer()
-                    Text(conversation.lastMessageAt, format: .dateTime.hour().minute())
-                        .font(type.detail)
-                        .foregroundStyle(.secondary)
-                }
-                if let preview = conversation.preview {
-                    Text(preview).font(type.detail).foregroundStyle(.secondary).lineLimit(2)
-                }
-            }
-        }
-        .padding(12)
-        .background(isSelected ? AnyShapeStyle(.quaternary) : AnyShapeStyle(.clear), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .contentShape(Rectangle())
-        .accessibilityValue(conversation.unreadCount > 0 ? Text("\(conversation.unreadCount) unread") : Text(""))
-    }
-}
-
-struct ConversationBubblesView: View {
-    let template: ConversationTemplate
-    let type: ProjectionType
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(template.bubbles) { bubble in
-                        HStack {
-                            if bubble.isFromMe { Spacer(minLength: 60) }
-                            Text(bubble.text)
-                                .font(type.body)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(bubble.isFromMe ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                .foregroundStyle(bubble.isFromMe ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-                                .accessibilityLabel(bubble.isFromMe ? Text("You: \(bubble.text)") : Text("\(template.title): \(bubble.text)"))
-                            if !bubble.isFromMe { Spacer(minLength: 60) }
-                        }
-                        .id(bubble.id)
-                    }
-                }
-                .padding(24)
-            }
-            .onChange(of: template.bubbles.last?.id, initial: true) { _, last in
-                if let last {
-                    proxy.scrollTo(last, anchor: .bottom)
-                }
-            }
-        }
     }
 }
 

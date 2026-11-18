@@ -159,10 +159,6 @@ import Testing
 
 @Suite struct IntentOutcomeTests {
     @Test func wasDelivered_whenDelivered_thenTrueOtherwiseFalse() {
-        #expect(MessageRelayOutcome.delivered(hubCount: 1).wasDelivered)
-        for outcome in [MessageRelayOutcome.keptForLater, .duplicate, .disabled, .rejected(.emptyBody), .unavailable] {
-            #expect(!outcome.wasDelivered)
-        }
         #expect(HubCommandOutcome.delivered(hubCount: 2).wasDelivered)
         for outcome in [HubCommandOutcome.noHubReachable, .rejected, .unavailable] {
             #expect(!outcome.wasDelivered)

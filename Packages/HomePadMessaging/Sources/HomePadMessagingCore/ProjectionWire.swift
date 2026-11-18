@@ -25,7 +25,6 @@ public enum HubToHostMessage: Sendable, Equatable {
     case hello
     case launch(appID: String)
     case action(appID: String, actionID: String, payload: [String: String])
-    case reply(conversationID: String, text: String)
     case mediaCommand(MediaCommand)
 }
 
@@ -143,10 +142,6 @@ public struct ProjectionCodec: Sendable {
             wire.appID = appID
             wire.actionID = actionID
             wire.payload = payload
-        case .reply(let conversationID, let text):
-            wire.type = HubType.reply.rawValue
-            wire.conversationID = conversationID
-            wire.text = text
         case .mediaCommand(let command):
             wire.type = HubType.mediaCommand.rawValue
             wire.command = command
@@ -165,8 +160,6 @@ public struct ProjectionCodec: Sendable {
             message = .launch(appID: try required(wire.appID))
         case .action:
             message = .action(appID: try required(wire.appID), actionID: try required(wire.actionID), payload: wire.payload ?? [:])
-        case .reply:
-            message = .reply(conversationID: try required(wire.conversationID), text: try required(wire.text))
         case .mediaCommand:
             message = .mediaCommand(try required(wire.command))
         }
@@ -202,8 +195,6 @@ public struct ProjectionCodec: Sendable {
             case .action(let appID, let actionID, let payload):
                 try validator.validate(appID: appID)
                 try validator.validate(actionID: actionID, payload: payload)
-            case .reply(let conversationID, let text):
-                try validator.validate(conversationID: conversationID, replyText: text)
             }
         } catch {
             throw .invalid(error)
@@ -246,7 +237,7 @@ private enum HostType: String {
 }
 
 private enum HubType: String {
-    case hello, launch, action, reply, mediaCommand
+    case hello, launch, action, mediaCommand
 }
 
 private struct WireHeader: Decodable {
@@ -264,8 +255,6 @@ private struct WireFrame: Codable {
     var template: ProjectionTemplate?
     var actionID: String?
     var payload: [String: String]?
-    var conversationID: String?
-    var text: String?
     var command: MediaCommand?
 
     init<Message>(frame: ProjectionFrame<Message>, type: String) {

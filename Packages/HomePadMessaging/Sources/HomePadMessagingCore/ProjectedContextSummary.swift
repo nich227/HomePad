@@ -7,19 +7,19 @@ import Foundation
 /// never save or log it.
 public struct ProjectedContextSummary: Equatable, Sendable, Identifiable {
     public enum Kind: String, Sendable, CaseIterable {
-        case message, calendarEvent, reminder, nowPlaying
+        case calendarEvent, reminder, nowPlaying
     }
 
-    /// The same for the same conversation, agenda entry, or player on the same companion. It is
-    /// built from identifiers only, never from the text.
+    /// The same for the same agenda entry or player on the same companion. It is built from
+    /// identifiers only, never from the text.
     public let id: String
     public let kind: Kind
     /// The member whose iPhone projected the item.
     public let ownerProfileID: UUID
-    /// The correspondent, the event or reminder name, or the track.
+    /// The event or reminder name, or the track.
     public let title: String
-    /// The conversation's latest message, the event's time and place, the reminder's due time and
-    /// list, or the artist and album. Empty when the companion sent none of that.
+    /// The event's time and place, the reminder's due time and list, or the artist and album.
+    /// Empty when the companion sent none of that.
     public let detail: String
 
     public init(id: String, kind: Kind, ownerProfileID: UUID, title: String, detail: String) {
@@ -78,15 +78,14 @@ public enum ProjectedContextSummarizer {
     /// Turns templates into summaries. The caller decides whose templates may be read; this only
     /// reads them.
     ///
-    /// A kind comes from the template itself: a conversation list gives messages, an agenda entry
-    /// says whether it is an event or a reminder, and a player that is playing gives now playing.
-    /// Every other template gives nothing. Left out: events that have ended, completed reminders,
-    /// a player that is not playing, and the text of a conversation whose owner shows the sender
-    /// only.
+    /// A kind comes from the template itself: an agenda entry says whether it is an event or a
+    /// reminder, and a player that is playing gives now playing. Every other template gives
+    /// nothing. Left out: events that have ended, completed reminders, and a player that is not
+    /// playing.
     ///
-    /// Messages are newest first, events and reminders soonest first with undated ones last. The
-    /// kinds take turns, so `limit` shortens every kind instead of dropping the last ones, and any
-    /// prefix of the result is balanced the same way.
+    /// Events and reminders are soonest first with undated ones last. The kinds take turns, so
+    /// `limit` shortens every kind instead of dropping the last ones, and any prefix of the result
+    /// is balanced the same way.
     ///
     /// `maxTextLength` counts characters as a person reads them, and applies to the title and to
     /// the detail separately. Clipped text ends with an ellipsis.
@@ -141,16 +140,6 @@ public enum ProjectedContextSummarizer {
             )
         }
         switch template {
-        case .conversationList(let list):
-            return list.conversations.map { conversation in
-                candidate(
-                    .message,
-                    itemID: conversation.id,
-                    title: conversation.title,
-                    detail: [conversation.preview],
-                    rank: -conversation.lastMessageAt.timeIntervalSinceReferenceDate
-                )
-            }
         case .agenda(let agenda):
             return agenda.entries.compactMap { entry in
                 let rank = entry.start?.timeIntervalSinceReferenceDate ?? .infinity
@@ -169,7 +158,7 @@ public enum ProjectedContextSummarizer {
             // A stopped player's title is a status line, not a track.
             guard player.isPlaying else { return [] }
             return [candidate(.nowPlaying, itemID: player.id, title: player.title, detail: [player.artist, player.album], rank: 0)]
-        case .list, .grid, .conversation, .information:
+        case .list, .grid, .information:
             return []
         }
     }

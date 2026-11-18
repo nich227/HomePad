@@ -9,8 +9,6 @@ public struct ProjectionLimits: Sendable, Equatable {
     /// Across all sections of one list.
     public var maxListRows = 24
     public var maxGridButtons = 8
-    public var maxConversations = 20
-    public var maxBubbles = 40
     public var maxInformationItems = 12
     public var maxInformationButtons = 3
     public var maxAgendaEntries = 24

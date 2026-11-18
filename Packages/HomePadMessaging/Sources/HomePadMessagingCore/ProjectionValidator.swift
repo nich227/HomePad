@@ -36,8 +36,6 @@ public struct ProjectionValidator: Sendable, Equatable {
         case .list(let list): try validate(list)
         case .grid(let grid): try buttons(grid.buttons, limit: limits.maxGridButtons, field: "grid.buttons")
         case .nowPlaying(let nowPlaying): try validate(nowPlaying)
-        case .conversationList(let list): try validate(list)
-        case .conversation(let conversation): try validate(conversation)
         case .information(let information): try validate(information)
         case .agenda(let agenda): try validate(agenda)
         }
@@ -99,30 +97,6 @@ public struct ProjectionValidator: Sendable, Equatable {
         try unique(nowPlaying.commands.map(\.rawValue), field: "nowPlaying.commands")
     }
 
-    private func validate(_ list: ConversationListTemplate) throws(Failure) {
-        try count(list.conversations.count, atMost: limits.maxConversations, field: "conversations")
-        try unique(list.conversations.map(\.id), field: "conversation.id")
-        try optionalText(list.emptyMessage, limit: limits.maxSubtitleLength, field: "conversations.emptyMessage")
-        for conversation in list.conversations {
-            try identifier(conversation.id, field: "conversation.id")
-            try requiredText(conversation.title, limit: limits.maxTitleLength, field: "conversation.title")
-            try optionalText(conversation.preview, limit: limits.maxSubtitleLength, field: "conversation.preview")
-            try identifier(conversation.actionID, field: "conversation.actionID")
-            guard conversation.unreadCount >= 0 else { throw .invalidCount(field: "conversation.unreadCount") }
-        }
-    }
-
-    private func validate(_ conversation: ConversationTemplate) throws(Failure) {
-        try identifier(conversation.conversationID, field: "conversation.conversationID")
-        try optionalText(conversation.recipientHandle, limit: limits.maxIdentifierLength, field: "conversation.recipientHandle")
-        try count(conversation.bubbles.count, atMost: limits.maxBubbles, field: "conversation.bubbles")
-        try unique(conversation.bubbles.map(\.id), field: "bubble.id")
-        for bubble in conversation.bubbles {
-            try identifier(bubble.id, field: "bubble.id")
-            try requiredText(bubble.text, limit: limits.maxBodyLength, field: "bubble.text")
-        }
-    }
-
     private func validate(_ information: InformationTemplate) throws(Failure) {
         try count(information.items.count, atMost: limits.maxInformationItems, field: "information.items")
         try unique(information.items.map(\.id), field: "information.item.id")
@@ -159,14 +133,6 @@ public struct ProjectionValidator: Sendable, Equatable {
             try identifier(key, field: "action.payload.key")
             try optionalText(value, limit: limits.maxBodyLength, field: "action.payload.value")
         }
-    }
-
-    public func validate(conversationID: String, replyText: String) throws(Failure) {
-        try identifier(conversationID, field: "conversationID")
-        guard !replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw .emptyText(field: "reply.text")
-        }
-        try optionalText(replyText, limit: limits.maxBodyLength, field: "reply.text")
     }
 
     // MARK: Primitives

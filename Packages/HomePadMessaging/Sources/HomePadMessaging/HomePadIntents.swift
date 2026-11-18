@@ -8,8 +8,6 @@ import HomePadMessagingCore
 public final class HomePadIntentHandlers {
     public static let shared = HomePadIntentHandlers()
 
-    /// Relays one incoming message. Set to `ProjectionHost.relayMessage(senderName:handle:text:)`.
-    public var relayMessage: (@MainActor (_ senderName: String, _ handle: String?, _ text: String) async -> MessageRelayOutcome)?
     /// Sends a web page to a hub. Supplied by the app from its beaming feature.
     public var beam: (@MainActor (URL) async -> HubCommandOutcome)?
     /// Brings a projected app to the front on a hub. Set to `ProjectionHost.present(appID:)`.
@@ -19,11 +17,8 @@ public final class HomePadIntentHandlers {
 
     private init() {}
 
-    /// Wires the three handlers a `ProjectionHost` can serve.
+    /// Wires the two handlers a `ProjectionHost` can serve.
     public func register(host: ProjectionHost) {
-        relayMessage = { [weak host] senderName, handle, text in
-            await host?.relayMessage(senderName: senderName, handle: handle, text: text) ?? .unavailable
-        }
         showApp = { [weak host] appID in
             await host?.present(appID: appID) ?? .unavailable
         }
@@ -36,63 +31,6 @@ public final class HomePadIntentHandlers {
 /// Makes this package's intents visible to the app. The app target lists it in the
 /// `includedPackages` of its own `AppIntentsPackage`.
 public struct HomePadMessagingIntents: AppIntentsPackage {}
-
-// MARK: Relay a message
-
-/// The action for a Shortcuts "When I get a message" automation. Shortcuts passes in who wrote
-/// and what they wrote; this hands both to the running app, which shows them on a nearby hub.
-public struct RelayMessageToHomePadIntent: AppIntent {
-    public static let title: LocalizedStringResource = "Relay Message to HomePad"
-    public static let description = IntentDescription(
-        "Shows a message you received on a nearby HomePad. Use it as the action of a Shortcuts automation that runs when you get a message.",
-        categoryName: "Messages"
-    )
-    public static let supportedModes: IntentModes = .background
-    // Messages arrive while the iPhone is locked. The hub still shows them only to their owner.
-    public static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @Parameter(title: "Sender", description: "Who the message is from.")
-    public var senderName: String
-
-    @Parameter(title: "Message", description: "The text of the message.")
-    public var message: String
-
-    @Parameter(title: "Phone or Email", description: "Where a reply should go. Optional.")
-    public var handle: String?
-
-    public static var parameterSummary: some ParameterSummary {
-        Summary("Relay \(\.$message) from \(\.$senderName) to HomePad") {
-            \.$handle
-        }
-    }
-
-    public init() {}
-
-    @MainActor
-    public func perform() async throws -> some IntentResult & ReturnsValue<Bool> & ProvidesDialog {
-        let outcome = await HomePadIntentHandlers.shared.relayMessage?(senderName, handle, message) ?? .unavailable
-        return .result(value: outcome.wasDelivered, dialog: IntentDialog(stringLiteral: Self.text(for: outcome)))
-    }
-
-    static func text(for outcome: MessageRelayOutcome) -> String {
-        switch outcome {
-        case .delivered:
-            String(localized: "Sent to HomePad.")
-        case .keptForLater:
-            String(localized: "No HomePad is nearby. The message will show when one connects while HomePad stays open on this iPhone.")
-        case .duplicate:
-            String(localized: "This message was already relayed.")
-        case .disabled:
-            String(localized: "Showing Messages on HomePad is turned off in Settings.")
-        case .rejected(.emptySender):
-            String(localized: "The sender is missing. Pass the sender from the automation.")
-        case .rejected(.emptyBody):
-            String(localized: "The message is empty. Pass the message content from the automation.")
-        case .unavailable:
-            String(localized: "HomePad is not ready. Open HomePad on this iPhone once, then try again.")
-        }
-    }
-}
 
 // MARK: Beam a page
 

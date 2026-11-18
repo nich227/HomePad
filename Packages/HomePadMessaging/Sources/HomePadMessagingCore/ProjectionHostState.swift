@@ -9,7 +9,6 @@ public enum ProjectionHostEvent: Sendable, Equatable {
     case action(appID: String, actionID: String, payload: [String: String], hubID: UUID)
     /// The hub's back button.
     case back(appID: String, hubID: UUID)
-    case reply(conversationID: String, text: MemoryOnly<String>, hubID: UUID)
     case mediaCommand(MediaCommand, hubID: UUID)
 }
 
@@ -168,11 +167,6 @@ public struct ProjectionHostState: Sendable, Equatable {
             } else {
                 events.append(.action(appID: appID, actionID: actionID, payload: payload, hubID: hub.id))
             }
-        case .reply(let conversationID, let text):
-            try checked { () throws(ProjectionValidationError) in
-                try validator.validate(conversationID: conversationID, replyText: text)
-            }
-            events.append(.reply(conversationID: conversationID, text: MemoryOnly(text), hubID: hub.id))
         case .mediaCommand(let command):
             events.append(.mediaCommand(command, hubID: hub.id))
         }

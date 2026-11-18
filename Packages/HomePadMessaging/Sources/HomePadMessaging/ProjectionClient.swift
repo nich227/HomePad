@@ -16,7 +16,6 @@ public final class ProjectionClient {
     private var state: ProjectionClientState
     @ObservationIgnored private let channel: any PeerChannel
     @ObservationIgnored private let session: HouseholdSession
-    @ObservationIgnored private let settings: HomePadSettings
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let codec = ProjectionCodec()
     @ObservationIgnored private var peers: [UUID: PeerDevice] = [:]
@@ -33,12 +32,10 @@ public final class ProjectionClient {
     public init(
         channel: any PeerChannel,
         session: HouseholdSession,
-        settings: HomePadSettings,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.channel = channel
         self.session = session
-        self.settings = settings
         self.now = now
         self.state = ProjectionClientState(session: UUID())
     }
@@ -136,32 +133,13 @@ public final class ProjectionClient {
 
     // MARK: Context summaries
 
-    /// Short text summaries of the active member's projected content: recent messages, coming
-    /// events, open reminders, and what is playing. Empty unless personal content is unlocked and
+    /// Short text summaries of the active member's projected content: coming events, open
+    /// reminders, and what is playing. Empty unless personal content is unlocked and
     /// that member's iPhone is connected and projecting, the same rule `content(for:depth:)` follows.
     ///
     /// The result holds personal text. Keep it in memory and never log it.
     public func contextSummaries(limit: Int = 8, maxTextLength: Int = 140) -> [ProjectedContextSummary] {
         state.contextSummaries(viewer: viewer, limit: limit, maxTextLength: maxTextLength, now: now())
-    }
-
-    // MARK: Replies
-
-    /// How a reply typed on the hub would be delivered for this conversation, as data the UI explains.
-    public func replyRoute(for id: ProjectedAppEntryID, canReply: Bool, hubCanSendText: Bool) -> ReplyRoute {
-        ReplyRouting.route(
-            ReplyContext(
-                conversationOwner: entry(id)?.ownerProfileID,
-                companionDeviceID: state.connectedDeviceIDs.contains(id.deviceID) ? id.deviceID : nil,
-                viewer: viewer,
-                canReply: canReply,
-                hubCanSendText: hubCanSendText,
-                hubMessagesAccountOwner: ReplyRouting.hubAccountOwner(
-                    named: settings[MessagingSettings.hubMessagesAccountOwner],
-                    in: session.profiles
-                )
-            )
-        )
     }
 
     // MARK: Commands to the companion
@@ -177,12 +155,6 @@ public final class ProjectionClient {
 
     public func back(in id: ProjectedAppEntryID) {
         perform(actionID: ProjectionReservedAction.back, in: id)
-    }
-
-    /// Hands a reply to the companion. The companion's owner still has to confirm it there.
-    public func sendReply(conversationID: String, text: String, in id: ProjectedAppEntryID) {
-        guard entry(id)?.decision.visibility == .visible else { return }
-        send(.reply(conversationID: conversationID, text: text), to: id.deviceID)
     }
 
     public func send(_ command: MediaCommand, in id: ProjectedAppEntryID) {

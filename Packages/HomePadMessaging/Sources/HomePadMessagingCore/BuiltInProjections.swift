@@ -2,91 +2,9 @@ import Foundation
 import HomePadCore
 
 public enum BuiltInProjectedApp {
-    public static let messagesID = "messages"
     public static let calendarID = "calendar"
     public static let remindersID = "reminders"
     public static let nowPlayingID = "nowPlaying"
-}
-
-/// Builds the Messages app's templates from the inbox.
-public enum MessagesProjection {
-    public static let rootTemplateID = "messages.list"
-    private static let conversationPrefix = "messages.conversation."
-    private static let openPrefix = "messages.open."
-
-    public static func conversationTemplateID(conversationID: String) -> String {
-        conversationPrefix + conversationID
-    }
-
-    public static func conversationID(fromTemplateID templateID: String) -> String? {
-        suffix(of: templateID, after: conversationPrefix)
-    }
-
-    public static func openActionID(conversationID: String) -> String {
-        openPrefix + conversationID
-    }
-
-    public static func conversationID(fromActionID actionID: String) -> String? {
-        suffix(of: actionID, after: openPrefix)
-    }
-
-    private static func suffix(of value: String, after prefix: String) -> String? {
-        guard value.hasPrefix(prefix), value.count > prefix.count else { return nil }
-        return String(value.dropFirst(prefix.count))
-    }
-
-    public static func listTemplate(
-        conversations: [MessageInbox.Conversation],
-        title: String,
-        emptyMessage: String,
-        showsPreviews: Bool,
-        limits: ProjectionLimits = .standard
-    ) -> ProjectionTemplate {
-        let summaries = conversations.prefix(limits.maxConversations).map { conversation in
-            ProjectedConversationSummary(
-                id: conversation.id,
-                title: conversation.title,
-                preview: conversation.preview(showsBody: showsPreviews, limit: limits.maxSubtitleLength),
-                lastMessageAt: conversation.lastMessageAt,
-                unreadCount: conversation.unreadCount,
-                actionID: openActionID(conversationID: conversation.id)
-            )
-        }
-        return .conversationList(
-            ConversationListTemplate(
-                id: rootTemplateID,
-                title: title.projectionTruncated(to: limits.maxTitleLength),
-                conversations: Array(summaries),
-                emptyMessage: emptyMessage.projectionTruncated(to: limits.maxSubtitleLength)
-            )
-        )
-    }
-
-    /// The newest messages of one conversation, oldest first.
-    public static func conversationTemplate(
-        _ conversation: MessageInbox.Conversation,
-        canReply: Bool,
-        limits: ProjectionLimits = .standard
-    ) -> ProjectionTemplate {
-        let bubbles = conversation.messages.suffix(limits.maxBubbles).map { message in
-            ProjectedBubble(
-                id: message.id.uuidString,
-                text: message.body.reveal(),
-                isFromMe: message.direction == .outgoing,
-                sentAt: message.receivedAt
-            )
-        }
-        return .conversation(
-            ConversationTemplate(
-                id: conversationTemplateID(conversationID: conversation.id),
-                title: conversation.title,
-                conversationID: conversation.id,
-                recipientHandle: conversation.handle,
-                bubbles: Array(bubbles),
-                canReply: canReply
-            )
-        )
-    }
 }
 
 /// An event or reminder as the companion read it, before it is laid out for the hub.
