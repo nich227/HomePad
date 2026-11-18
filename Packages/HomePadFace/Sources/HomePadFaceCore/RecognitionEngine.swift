@@ -133,7 +133,7 @@ public struct RecognitionEngine: Sendable {
             if stabilizer.decision == .nobody { clearPresence() }
             return publish(isFacePresent: false, at: frame.timestamp)
         }
-        proximity.update(sizeFraction: face.sizeFraction)
+        proximity.update(distance: face.distance?.meters)
         let identity = identity(of: face, templates: templates)
         var matchedAnotherMember = false
         if case .matched(let profileID) = identity {

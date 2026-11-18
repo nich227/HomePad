@@ -31,12 +31,12 @@ import Testing
         count: Int,
         from start: TimeInterval,
         depth: FaceDepthStatistics? = nil,
-        size: Double = 0.3,
+        distance: Double? = 0.6,
         pose: HeadPose = .frontal,
         quality: Float = 0.6
     ) throws -> [RecognitionOutcome] {
         try (0..<count).map { index in
-            let frame = try frame(at: start + Double(index) * 0.1, degrees: degrees, size: size, pose: pose, quality: quality, depth: depth)
+            let frame = try frame(at: start + Double(index) * 0.1, degrees: degrees, pose: pose, quality: quality, depth: depth, distance: distance)
             return engine.process(frame, templates: try templates()).outcome
         }
     }
@@ -113,14 +113,33 @@ import Testing
         #expect(try run(&noEmbedding, degrees: nil, count: 5, from: 0).last == .unknownPerson)
     }
 
-    @Test func process_whenFaceSizeCrossesTheBound_thenProximityChangeIsReported() throws {
+    @Test func process_whenPersonWalksIn_thenProximityStepsThroughTheThreeZonesAndEachStepIsReported() throws {
         var engine = engine()
-        _ = try run(&engine, degrees: 45, count: 2, from: 0, size: 0.1)
+        _ = try run(&engine, degrees: 45, count: 2, from: 0, distance: 3.2)
         #expect(engine.latest.proximity == .far)
         #expect(!engine.latest.didChange)
-        _ = try run(&engine, degrees: 45, count: 1, from: 1, size: 0.3)
-        #expect(engine.latest.proximity == .near)
+        _ = try run(&engine, degrees: 45, count: 1, from: 1, distance: 1.2)
+        #expect(engine.latest.proximity == .mid)
         #expect(engine.latest.didChange)
+        _ = try run(&engine, degrees: 45, count: 1, from: 1.1, distance: 1.2)
+        #expect(engine.latest.proximity == .mid)
+        #expect(!engine.latest.didChange)
+        _ = try run(&engine, degrees: 45, count: 3, from: 1.2, distance: 0.4)
+        #expect(engine.latest.proximity == .near)
+    }
+
+    @Test func process_whenFrameHasNoDistance_thenProximityHolds() throws {
+        var engine = engine()
+        _ = try run(&engine, degrees: 45, count: 1, from: 0, distance: 1.5)
+        _ = try run(&engine, degrees: 45, count: 3, from: 1, distance: nil)
+        #expect(engine.latest.proximity == .mid)
+    }
+
+    @Test func frame_whenBuiltWithALightSample_thenObservationCarriesItWithOrWithoutAFace() throws {
+        let light = SceneLightSample(exposure: nil, meanLuma: 0.4)
+        #expect(try frame(at: 0, degrees: 0, light: light).light == light)
+        #expect(FaceFrameObservation.empty(at: 0, light: light).light == light)
+        #expect(FaceFrameObservation.empty(at: 0).light == nil)
     }
 
     @Test func process_whenLiveMemberIsReplacedByAnotherFaceWithoutDepth_thenEvidenceDoesNotCarryOver() throws {
@@ -396,6 +415,9 @@ import Testing
         }
         #expect(options.map(\.value) == FaceSettings.NearDistance.allCases.map(\.rawValue))
         #expect(near.defaultValue == .string("standard"))
+        #expect(near.title == "Detail Distance")
+        #expect(options.map(\.title) == ["Closer", "Standard", "Farther"])
+        #expect(near.footer?.contains("arm's reach") == true)
         let strictness = try #require(FaceSettings.descriptors.first { $0.name == FaceSettings.matchStrictness.name })
         guard case .choice(let levels) = strictness.control else {
             Issue.record("match strictness is not a choice")

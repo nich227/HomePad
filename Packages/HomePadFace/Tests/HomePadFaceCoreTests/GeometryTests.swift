@@ -8,33 +8,126 @@ private func close(_ first: CGPoint, _ second: CGPoint, tolerance: Double = 1e-6
 }
 
 @Suite struct ProximityEstimatorTests {
-    @Test func update_whenFaceGrowsPastEnterBound_thenNear() {
-        var estimator = ProximityEstimator()
-        #expect(estimator.update(sizeFraction: 0.2) == .far)
-        #expect(estimator.update(sizeFraction: 0.22) == .near)
+    /// Standard zones (near under 1 m, far over 2.5 m, 10% hysteresis) without smoothing, so each
+    /// sample is the distance the zone is judged on.
+    private let unsmoothed = ProximityPolicy(responsiveness: 1)
+
+    private func zone(after distances: [Double], policy: ProximityPolicy? = nil) -> Proximity {
+        var estimator = ProximityEstimator(policy: policy ?? unsmoothed)
+        for distance in distances {
+            estimator.update(distance: distance)
+        }
+        return estimator.proximity
     }
 
-    @Test func update_whenFaceShrinksInsideHysteresisBand_thenStaysNear() {
-        var estimator = ProximityEstimator()
-        estimator.update(sizeFraction: 0.3)
-        #expect(estimator.update(sizeFraction: 0.18) == .near)
-        #expect(estimator.update(sizeFraction: 0.15) == .far)
-        #expect(estimator.update(sizeFraction: 0.18) == .far)
+    @Test func update_whenFirstEstimateArrives_thenZoneFollowsThePlainBoundaries() {
+        #expect(zone(after: [0.5]) == .near)
+        #expect(zone(after: [0.95]) == .near)
+        #expect(zone(after: [1.0]) == .mid)
+        #expect(zone(after: [1.8]) == .mid)
+        #expect(zone(after: [2.5]) == .mid)
+        #expect(zone(after: [2.6]) == .far)
+        #expect(zone(after: [4]) == .far)
     }
 
-    @Test func reset_whenNear_thenFar() {
-        var estimator = ProximityEstimator(policy: .farther)
-        estimator.update(sizeFraction: 0.16)
+    @Test func update_whenPersonWalksIn_thenEachZoneStartsABitInsideItsBoundary() {
+        #expect(zone(after: [3.0, 2.4]) == .far)
+        #expect(zone(after: [3.0, 2.2]) == .mid)
+        #expect(zone(after: [3.0, 2.2, 0.95]) == .mid)
+        #expect(zone(after: [3.0, 2.2, 0.85]) == .near)
+    }
+
+    @Test func update_whenPersonWalksAway_thenEachZoneEndsABitPastItsBoundary() {
+        #expect(zone(after: [0.5, 1.05]) == .near)
+        #expect(zone(after: [0.5, 1.2]) == .mid)
+        #expect(zone(after: [0.5, 1.2, 2.6]) == .mid)
+        #expect(zone(after: [0.5, 1.2, 2.8]) == .far)
+    }
+
+    @Test func update_whenPersonStandsAtTheNearBoundary_thenZoneDoesNotFlicker() {
+        let swaying = (0..<20).map { $0.isMultiple(of: 2) ? 0.95 : 1.05 }
+        var fromMid = ProximityEstimator(policy: unsmoothed)
+        fromMid.update(distance: 1.3)
+        var fromNear = ProximityEstimator(policy: unsmoothed)
+        fromNear.update(distance: 0.7)
+        for distance in swaying {
+            #expect(fromMid.update(distance: distance) == .mid)
+            #expect(fromNear.update(distance: distance) == .near)
+        }
+    }
+
+    @Test func update_whenPersonStandsAtTheFarBoundary_thenZoneDoesNotFlicker() {
+        let swaying = (0..<20).map { $0.isMultiple(of: 2) ? 2.35 : 2.65 }
+        var fromMid = ProximityEstimator(policy: unsmoothed)
+        fromMid.update(distance: 2.0)
+        var fromFar = ProximityEstimator(policy: unsmoothed)
+        fromFar.update(distance: 3.5)
+        for distance in swaying {
+            #expect(fromMid.update(distance: distance) == .mid)
+            #expect(fromFar.update(distance: distance) == .far)
+        }
+    }
+
+    @Test func update_whenDistanceJumpsAcrossTheMidZone_thenZoneFollowsInOneStep() {
+        #expect(zone(after: [0.5, 3.0]) == .far)
+        #expect(zone(after: [3.0, 0.5]) == .near)
+    }
+
+    @Test func update_whenDistanceIsMissingOrNotUsable_thenZoneAndDistanceHold() {
+        var estimator = ProximityEstimator(policy: unsmoothed)
+        #expect(estimator.update(distance: nil) == .far)
+        #expect(estimator.distance == nil)
+        estimator.update(distance: 0.5)
+        for unusable in [nil, Double.nan, .infinity, 0, -1] {
+            #expect(estimator.update(distance: unusable) == .near)
+        }
+        #expect(estimator.distance == 0.5)
+    }
+
+    @Test func update_whenSamplesJitter_thenDistanceIsSmoothed() throws {
+        var estimator = ProximityEstimator()
+        estimator.update(distance: 1.2)
+        estimator.update(distance: 2.0)
+        #expect(abs(try #require(estimator.distance) - 1.6) < 1e-9)
+        #expect(estimator.proximity == .mid)
+    }
+
+    @Test func reset_whenNear_thenFarAndDistanceUnknown() {
+        var estimator = ProximityEstimator()
+        estimator.update(distance: 0.5)
         #expect(estimator.proximity == .near)
         estimator.reset()
         #expect(estimator.proximity == .far)
+        #expect(estimator.distance == nil)
     }
 
-    @Test func policy_whenExitAboveEnter_thenExitIsClamped() {
-        let policy = ProximityPolicy(nearEnter: 0.2, nearExit: 0.5)
-        #expect(policy.nearExit == 0.2)
-        #expect(ProximityPolicy.closer.nearEnter > ProximityPolicy.standard.nearEnter)
-        #expect(ProximityPolicy.farther.nearEnter < ProximityPolicy.standard.nearEnter)
+    @Test func policy_whenStandard_thenZonesMatchTheSpecification() {
+        #expect(ProximityPolicy.standard.nearBoundary == 1)
+        #expect(ProximityPolicy.standard.farBoundary == 2.5)
+        #expect(ProximityPolicy.standard.hysteresis == 0.1)
+    }
+
+    @Test func policy_whenScaled_thenBothBoundariesMove() {
+        #expect(abs(ProximityPolicy.closer.nearBoundary - 0.75) < 1e-9)
+        #expect(abs(ProximityPolicy.closer.farBoundary - 1.875) < 1e-9)
+        #expect(abs(ProximityPolicy.farther.nearBoundary - 1.3) < 1e-9)
+        #expect(abs(ProximityPolicy.farther.farBoundary - 3.25) < 1e-9)
+        #expect(ProximityPolicy.farther.hysteresis == ProximityPolicy.standard.hysteresis)
+        #expect(zone(after: [0.9], policy: .closer) == .mid)
+        #expect(zone(after: [1.2], policy: .farther) == .near)
+    }
+
+    @Test func policy_whenValuesOutOfRange_thenClamped() {
+        let inverted = ProximityPolicy(nearBoundary: 2, farBoundary: 1, hysteresis: 0.2, responsiveness: 7)
+        #expect(inverted.nearBoundary == 2)
+        #expect(inverted.farBoundary == 2)
+        #expect(inverted.hysteresis == 0)
+        #expect(inverted.responsiveness == 1)
+        let tight = ProximityPolicy(nearBoundary: -1, farBoundary: 0.15, hysteresis: 0.9, responsiveness: 0)
+        #expect(tight.nearBoundary == 0.05)
+        #expect(abs(tight.hysteresis - 0.5) < 1e-9)
+        #expect(tight.responsiveness == 0.05)
+        #expect(ProximityPolicy(hysteresis: -1).hysteresis == 0)
     }
 
     @Test func sizeFraction_whenFrameIsLandscapeOrPortrait_thenRelativeToShorterSide() {
@@ -46,6 +139,92 @@ private func close(_ first: CGPoint, _ second: CGPoint, tolerance: Double = 1e-6
         #expect(ProximityEstimator.sizeFraction(normalizedHeight: 0.5, frameWidth: 0, frameHeight: 720) == 0)
         #expect(ProximityEstimator.sizeFraction(normalizedHeight: .nan, frameWidth: 10, frameHeight: 10) == 0)
         #expect(ProximityEstimator.sizeFraction(normalizedHeight: -1, frameWidth: 10, frameHeight: 10) == 0)
+    }
+}
+
+@Suite struct FaceDistanceModelTests {
+    private let model = FaceDistanceModel()
+    /// Focal length in pixels of a 1280 pixel wide frame with a 60 degree field of view.
+    private let focalLength = 640 / tan(Double.pi / 6)
+
+    private func depth(median: Float, valid: Int = 100, of total: Int = 100) -> FaceDepthStatistics {
+        FaceDepthStatistics(sampleCount: total, validCount: valid, medianDepth: median, planeResidual: 0.01, centerRelief: 0.02)
+    }
+
+    @Test func metersFromFaceSize_whenLandscapeFrame_thenPinholeDistance() throws {
+        let meters = try #require(model.metersFromFaceSize(
+            normalizedFaceHeight: 0.25, frameWidth: 1280, frameHeight: 720, fieldOfViewDegrees: 60
+        ))
+        #expect(abs(meters - focalLength * 0.17 / 180) < 1e-9)
+        #expect(abs(meters - 1.047) < 0.001)
+    }
+
+    @Test func metersFromFaceSize_whenPortraitFrame_thenFieldOfViewSpansTheLongerSide() throws {
+        let meters = try #require(model.metersFromFaceSize(
+            normalizedFaceHeight: 0.1, frameWidth: 720, frameHeight: 1280, fieldOfViewDegrees: 60
+        ))
+        #expect(abs(meters - focalLength * 0.17 / 128) < 1e-9)
+    }
+
+    @Test func metersFromFaceSize_whenFaceIsHalfAsTall_thenTwiceAsFar() throws {
+        let near = try #require(model.metersFromFaceSize(normalizedFaceHeight: 0.3, frameWidth: 1280, frameHeight: 720, fieldOfViewDegrees: 60))
+        let far = try #require(model.metersFromFaceSize(normalizedFaceHeight: 0.15, frameWidth: 1280, frameHeight: 720, fieldOfViewDegrees: 60))
+        #expect(abs(far - 2 * near) < 1e-9)
+    }
+
+    @Test func metersFromFaceSize_whenLensIsWider_thenSameFaceSizeMeansCloser() throws {
+        let narrow = try #require(model.metersFromFaceSize(normalizedFaceHeight: 0.2, frameWidth: 1280, frameHeight: 720, fieldOfViewDegrees: 60))
+        let wide = try #require(model.metersFromFaceSize(normalizedFaceHeight: 0.2, frameWidth: 1280, frameHeight: 720, fieldOfViewDegrees: 120))
+        #expect(wide < narrow)
+        #expect(abs(wide / narrow - tan(Double.pi / 6) / tan(Double.pi / 3)) < 1e-9)
+    }
+
+    @Test func metersFromFaceSize_whenInputMissingOrNotUsable_thenNil() {
+        func meters(height: Double = 0.2, width: Double = 1280, frameHeight: Double = 720, fieldOfView: Double = 60) -> Double? {
+            model.metersFromFaceSize(normalizedFaceHeight: height, frameWidth: width, frameHeight: frameHeight, fieldOfViewDegrees: fieldOfView)
+        }
+        #expect(meters() != nil)
+        #expect(meters(height: 0) == nil)
+        #expect(meters(height: -0.2) == nil)
+        #expect(meters(height: .nan) == nil)
+        #expect(meters(width: 0) == nil)
+        #expect(meters(frameHeight: 0) == nil)
+        #expect(meters(width: .infinity) == nil)
+        #expect(meters(fieldOfView: 0) == nil)
+        #expect(meters(fieldOfView: 180) == nil)
+        #expect(meters(fieldOfView: .nan) == nil)
+    }
+
+    @Test func estimate_whenDepthIsPlausible_thenDepthWins() {
+        #expect(model.estimate(depth: depth(median: 0.5), faceSizeMeters: 0.62) == FaceDistanceEstimate(meters: 0.5, source: .depth))
+        #expect(model.estimate(depth: depth(median: 0.5), faceSizeMeters: nil) == FaceDistanceEstimate(meters: 0.5, source: .depth))
+        #expect(model.estimate(depth: faceLikeDepth(), faceSizeMeters: 0.5)?.source == .depth)
+    }
+
+    @Test func estimate_whenDepthIsMissing_thenFaceSizeIsUsed() {
+        #expect(model.estimate(depth: nil, faceSizeMeters: 1.8) == FaceDistanceEstimate(meters: 1.8, source: .faceSize))
+    }
+
+    @Test func estimate_whenDepthIsSparseOrOutOfRange_thenFaceSizeIsUsed() {
+        let fallback = FaceDistanceEstimate(meters: 1.8, source: .faceSize)
+        #expect(model.estimate(depth: depth(median: 1.7, valid: 10, of: 10), faceSizeMeters: 1.8) == fallback)
+        #expect(model.estimate(depth: depth(median: 1.7, valid: 25, of: 100), faceSizeMeters: 1.8) == fallback)
+        #expect(model.estimate(depth: depth(median: 0.05), faceSizeMeters: 1.8) == fallback)
+        #expect(model.estimate(depth: depth(median: 3.5), faceSizeMeters: 1.8) == fallback)
+        #expect(model.estimate(depth: depth(median: 0), faceSizeMeters: 1.8) == fallback)
+    }
+
+    @Test func estimate_whenDepthDisagreesWithFaceSizeByFar_thenFaceSizeIsUsed() {
+        #expect(model.estimate(depth: depth(median: 0.4), faceSizeMeters: 2.0)?.source == .faceSize)
+        #expect(model.estimate(depth: depth(median: 2.9), faceSizeMeters: 0.5)?.source == .faceSize)
+        #expect(model.estimate(depth: depth(median: 1.0), faceSizeMeters: 2.0)?.source == .depth)
+    }
+
+    @Test func estimate_whenNothingIsUsable_thenNil() {
+        #expect(model.estimate(depth: nil, faceSizeMeters: nil) == nil)
+        #expect(model.estimate(depth: nil, faceSizeMeters: .nan) == nil)
+        #expect(model.estimate(depth: nil, faceSizeMeters: -1) == nil)
+        #expect(model.estimate(depth: depth(median: 9), faceSizeMeters: nil) == nil)
     }
 }
 

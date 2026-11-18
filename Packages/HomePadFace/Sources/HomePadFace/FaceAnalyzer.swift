@@ -15,6 +15,7 @@ struct FaceFrameAnalysis {
         let depth: FaceDepthStatistics?
         let alignedCrop: CVPixelBuffer?
         let viewerPosition: FaceViewerPosition
+        let distance: FaceDistanceEstimate?
     }
 
     let prominentFaceCount: Int
@@ -36,17 +37,20 @@ public struct FaceAnalyzer: Sendable {
         /// side, flip `yawSign`.
         public var yawSign: Double
         public var pitchSign: Double
+        public var distance: FaceDistanceModel
 
         public init(
             selector: PrimaryFaceSelector = PrimaryFaceSelector(),
             depthGridSide: Int = 24,
             yawSign: Double = 1,
-            pitchSign: Double = -1
+            pitchSign: Double = -1,
+            distance: FaceDistanceModel = FaceDistanceModel()
         ) {
             self.selector = selector
             self.depthGridSide = depthGridSide
             self.yawSign = yawSign
             self.pitchSign = pitchSign
+            self.distance = distance
         }
     }
 
@@ -96,6 +100,7 @@ public struct FaceAnalyzer: Sendable {
             crop = alignedCrop(of: frame, uprightHeight: size.height, transform: transform, side: cropSide)
         }
 
+        let depth = frame.depthData.flatMap { depthStatistics(of: $0, orientation: frame.orientation, faceBox: box) }
         let face = FaceFrameAnalysis.Face(
             sizeFraction: ProximityEstimator.sizeFraction(
                 normalizedHeight: box.height,
@@ -109,10 +114,19 @@ public struct FaceAnalyzer: Sendable {
             ),
             captureQuality: quality.results?.first?.faceCaptureQuality ?? 0,
             eyeOpenness: EyeGeometry.meanOpenness(outlines: [eyeOutlines.0, eyeOutlines.1]),
-            depth: frame.depthData.flatMap { depthStatistics(of: $0, orientation: frame.orientation, faceBox: box) },
+            depth: depth,
             alignedCrop: crop,
             // Vision's box is in the upright, unmirrored camera image with a bottom-left origin.
-            viewerPosition: FaceViewerPosition(uprightCameraBox: box)
+            viewerPosition: FaceViewerPosition(uprightCameraBox: box),
+            distance: configuration.distance.estimate(
+                depth: depth,
+                faceSizeMeters: configuration.distance.metersFromFaceSize(
+                    normalizedFaceHeight: box.height,
+                    frameWidth: size.width,
+                    frameHeight: size.height,
+                    fieldOfViewDegrees: frame.fieldOfViewDegrees
+                )
+            )
         )
         return FaceFrameAnalysis(prominentFaceCount: selection.prominentFaceCount, face: face)
     }
@@ -190,9 +204,10 @@ struct FaceFrameProcessor: Sendable {
     let minimumQualityForEmbedding: Float
 
     func process(_ frame: CameraFrame) -> FaceFrameObservation {
+        let light = SceneLightSample(exposure: frame.exposure, meanLuma: SceneLuma.mean(of: frame.pixelBuffer))
         let analysis = analyzer.analyze(frame, cropSide: embedder.inputSide)
         guard let face = analysis.face else {
-            return .empty(at: frame.timestamp)
+            return .empty(at: frame.timestamp, light: light)
         }
         var embedding: FaceEmbedding?
         if face.captureQuality >= minimumQualityForEmbedding, let crop = face.alignedCrop {
@@ -208,8 +223,35 @@ struct FaceFrameProcessor: Sendable {
                 embedding: embedding,
                 depth: face.depth,
                 eyeOpenness: face.eyeOpenness,
-                viewerPosition: face.viewerPosition
-            )
+                viewerPosition: face.viewerPosition,
+                distance: face.distance
+            ),
+            light: light
         )
+    }
+}
+
+enum SceneLuma {
+    /// Mean brightness of about a thousand luma samples taken on a grid across the frame. The
+    /// frame is read in place and not copied. Returns `nil` for a pixel format without an 8-bit
+    /// luma plane.
+    static func mean(of buffer: CVPixelBuffer, gridSide: Int = 32) -> Double? {
+        let format = CVPixelBufferGetPixelFormatType(buffer)
+        let isVideoRange = format == kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        guard isVideoRange || format == kCVPixelFormatType_420YpCbCr8BiPlanarFullRange else { return nil }
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 0) else { return nil }
+        let width = CVPixelBufferGetWidthOfPlane(buffer, 0), height = CVPixelBufferGetHeightOfPlane(buffer, 0)
+        let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
+        var sum = 0
+        for row in 0..<gridSide {
+            let y = (2 * row + 1) * height / (2 * gridSide)
+            for column in 0..<gridSide {
+                let x = (2 * column + 1) * width / (2 * gridSide)
+                sum += Int(base.load(fromByteOffset: y * bytesPerRow + x, as: UInt8.self))
+            }
+        }
+        return SceneBrightness.meanLuma(sum: sum, count: width > 0 && height > 0 ? gridSide * gridSide : 0, isVideoRange: isVideoRange)
     }
 }

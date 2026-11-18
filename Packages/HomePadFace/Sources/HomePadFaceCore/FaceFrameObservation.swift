@@ -15,6 +15,8 @@ public struct FaceObservationSample: Equatable, Sendable {
     public let eyeOpenness: Float?
     /// Center of the face in the mirror view.
     public let viewerPosition: FaceViewerPosition?
+    /// How far away the face is, when it could be estimated.
+    public let distance: FaceDistanceEstimate?
 
     public init(
         sizeFraction: Double,
@@ -23,9 +25,11 @@ public struct FaceObservationSample: Equatable, Sendable {
         embedding: FaceEmbedding?,
         depth: FaceDepthStatistics? = nil,
         eyeOpenness: Float? = nil,
-        viewerPosition: FaceViewerPosition? = nil
+        viewerPosition: FaceViewerPosition? = nil,
+        distance: FaceDistanceEstimate? = nil
     ) {
         self.viewerPosition = viewerPosition
+        self.distance = distance
         self.sizeFraction = sizeFraction
         self.pose = pose
         self.captureQuality = captureQuality
@@ -41,15 +45,23 @@ public struct FaceFrameObservation: Equatable, Sendable {
     /// Faces of comparable size in the frame, the primary one included.
     public let prominentFaceCount: Int
     public let primary: FaceObservationSample?
+    /// What the frame says about the light in the room, with or without a face in it.
+    public let light: SceneLightSample?
 
-    public init(timestamp: TimeInterval, prominentFaceCount: Int, primary: FaceObservationSample?) {
+    public init(
+        timestamp: TimeInterval,
+        prominentFaceCount: Int,
+        primary: FaceObservationSample?,
+        light: SceneLightSample? = nil
+    ) {
         self.timestamp = timestamp
         self.prominentFaceCount = prominentFaceCount
         self.primary = primary
+        self.light = light
     }
 
-    public static func empty(at timestamp: TimeInterval) -> FaceFrameObservation {
-        FaceFrameObservation(timestamp: timestamp, prominentFaceCount: 0, primary: nil)
+    public static func empty(at timestamp: TimeInterval, light: SceneLightSample? = nil) -> FaceFrameObservation {
+        FaceFrameObservation(timestamp: timestamp, prominentFaceCount: 0, primary: nil, light: light)
     }
 }
 

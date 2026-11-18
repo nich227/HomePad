@@ -71,6 +71,11 @@ public struct CameraFrame {
     public let timestamp: TimeInterval
     /// How to turn the buffer upright relative to gravity.
     public let orientation: CGImagePropertyOrientation
+    /// The active format's field of view across the frame's longer side, in degrees. 0 when the
+    /// device does not report one.
+    public let fieldOfViewDegrees: Double
+    /// The exposure the device used around this frame.
+    public let exposure: CameraExposure?
 }
 
 /// Hands the capture session to a preview layer.
@@ -207,11 +212,25 @@ public actor FaceCameraPipeline {
             session.isMultitaskingCameraAccessEnabled = true
         }
 
+        // Center Stage crops and moves the frame to follow people. Distance from face size and
+        // the viewer position both need the whole, fixed field of view.
+        AVCaptureDevice.centerStageControlMode = .app
+        AVCaptureDevice.isCenterStageEnabled = false
+        relay.fieldOfViewDegrees = Self.fieldOfView(of: device)
+        relay.device = device
+
         self.device = device
         self.relay = relay
         self.hasDepth = depthAttached
         observeRotation(of: device)
         observeSession(session)
+    }
+
+    /// The lens differs between devices and formats, so the field of view is read, not assumed.
+    private static func fieldOfView(of device: AVCaptureDevice) -> Double {
+        let format = device.activeFormat
+        let corrected = device.isGeometricDistortionCorrectionSupported && device.isGeometricDistortionCorrectionEnabled
+        return Double(corrected ? format.geometricDistortionCorrectedVideoFieldOfView : format.videoFieldOfView)
     }
 
     private static func disableMirroring(on connection: AVCaptureConnection?) {
@@ -325,6 +344,8 @@ private final class FrameRelay: NSObject, AVCaptureVideoDataOutputSampleBufferDe
     var throttle: FrameThrottle
     var rotationAngle: CGFloat = 0
     var isAnalysisEnabled = true
+    var fieldOfViewDegrees: Double = 0
+    var device: AVCaptureDevice?
     private let handler: @Sendable (CameraFrame) -> Void
 
     init(throttle: FrameThrottle, handler: @escaping @Sendable (CameraFrame) -> Void) {
@@ -365,7 +386,16 @@ private final class FrameRelay: NSObject, AVCaptureVideoDataOutputSampleBufferDe
             pixelBuffer: pixelBuffer,
             depthData: depthData,
             timestamp: now,
-            orientation: FaceCameraPipeline.orientation(forRotationAngle: rotationAngle)
+            orientation: FaceCameraPipeline.orientation(forRotationAngle: rotationAngle),
+            fieldOfViewDegrees: fieldOfViewDegrees,
+            exposure: device.map { device in
+                CameraExposure(
+                    iso: Double(device.iso),
+                    exposureDuration: device.exposureDuration.seconds,
+                    aperture: Double(device.lensAperture),
+                    targetOffset: Double(device.exposureTargetOffset)
+                )
+            }
         ))
     }
 }

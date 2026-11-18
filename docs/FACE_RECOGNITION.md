@@ -46,7 +46,8 @@ package logs nothing.
   drops them after 3 consecutive misses, or when the lock delay passes without a match. If two
   profiles keep alternating, it locks and stays locked until one of them wins cleanly.
 - `LivenessTracker` decides whether the matched face is a real face. See "Liveness".
-- `ProximityEstimator` turns the face size into near or far, with hysteresis.
+- `ProximityEstimator` turns the estimated distance into one of three zones (near, mid, far),
+  with hysteresis at both boundaries. See "Distance and the three zones".
 
 The result is one of four outcomes, and `HouseholdSessionDriver` applies it to `HouseholdSession`:
 
@@ -223,6 +224,90 @@ gravity and not the interface.
 `FacePositionSmoother` applies a low-pass filter, reports a new position only after the face moved
 at least 1% of the frame, and keeps the last position through a dropout of one or two frames.
 
+### Distance and the three zones
+
+The hub shows more detail the closer a person is. `service.proximity` and `session.proximity`
+carry one of three zones:
+
+| Zone | Distance | Standard boundary |
+|---|---|---|
+| `.near` | Arm's reach | Less than 1.0 m |
+| `.mid` | Approaching | 1.0 m to 2.5 m |
+| `.far` | Across the room | More than 2.5 m |
+
+`.far` is also the value when nobody is in view.
+
+**Where the distance comes from.** `FaceDistanceModel` estimates meters for each analyzed frame:
+
+1. With the TrueDepth camera, it takes the median of the valid depth readings on the face. That
+   is a real distance. It is used when at least 20 readings and 30% of the samples are valid, the
+   value is between 0.15 m and 3 m, and it is within a factor of 2.5 of the face-size estimate.
+2. Otherwise it uses the size of the face in the frame. A face of a typical height that covers
+   fewer pixels is farther away. The camera's field of view is read from the active capture
+   format (the distortion-corrected value when that correction is on), so a wide front camera and
+   a narrow one give the same answer for the same person.
+
+**How rough the face-size estimate is.** It assumes the detector's face box is 0.17 m tall. Real
+faces differ: a child's face is smaller, a tilted or turned head changes the box, and the detector
+does not put the box in the same place on everyone. Expect errors of a quarter of the distance
+either way, more for children, who read as farther away than they are. The estimate is good
+enough to pick a zone and not good enough to quote a distance. The depth camera is built for
+close range, so near the far boundary its readings are often missing and face size decides.
+
+**Steady zones.** `ProximityEstimator` smooths the distance and applies 10% hysteresis at both
+boundaries. To enter a nearer zone the distance must drop 10% below the boundary, and to leave it
+again it must rise 10% above. A person standing at 1.0 m or 2.5 m does not flip the layout.
+
+**Center Stage is turned off** for this camera. It crops and moves the frame to follow people,
+which would make the face-size distance and `facePosition` wrong.
+
+The "Detail Distance" setting scales both boundaries: Closer multiplies them by 0.75 and Farther
+by 1.3.
+
+`service.faceDistance` exposes the latest estimate, rounded to 5 cm, with its source (`depth` or
+`faceSize`). It is there for calibration. Layouts read `proximity`.
+
+### Room brightness, for Night Mode
+
+An app cannot read the iPad's ambient light sensor. The package estimates the room's brightness
+from the camera it already runs:
+
+- `service.roomBrightness` is a smoothed value from 0 (dark) to 1 (daylight indoors).
+- `service.isRoomDark` is the decision for Night Mode.
+- Both are `nil` while the camera is not running, while frames are not analyzed (the mirror
+  alone), and for the first 1.5 s after the camera starts.
+
+**Which signal.** Pixel brightness is a poor measure, because auto exposure lifts a dim room to
+the same mid gray as a bright one. The estimate uses what the capture device reports instead:
+
+| Device value | What it says |
+|---|---|
+| `iso` | Sensor gain. It rises as the room gets darker |
+| `exposureDuration` | Exposure time. It gets longer as the room gets darker |
+| `lensAperture` | Fixed on these cameras. Needed for the equation |
+| `exposureTargetOffset` | How many stops short of its target the camera is. It goes negative once gain and time are at their limits, so the estimate keeps falling in a room too dark for the camera |
+
+From these, `CameraExposure.sceneExposureValue` is the standard exposure value at ISO 100:
+`log2(aperture² / duration) - log2(iso / 100) + targetOffset`. It is mapped to 0...1 over the
+range -2 to 10. A lit living room is around 6 (0.67), and a room with one dim lamp is around 2
+(0.33).
+
+The mean of about a thousand luma samples per frame is also computed. It is the fallback when the
+device reports no usable exposure. In that case the value only separates "too dark for the camera
+to lift" from everything else.
+
+**The decision.** `AmbientLightEstimator` averages over about 2 s. The room counts as dark at or
+below 0.22 (roughly 4 lux) and as lit again at or above 0.30 (roughly 8 lux). The brightness must
+stay past the bound for 8 s before `isRoomDark` changes, so a passing shadow or a light switched
+on for a moment does not flip it. The thresholds are fixed in `AmbientLightPolicy`. There is no
+setting for them yet.
+
+**It is an estimate.** It measures what the front camera sees, not the light falling on the
+screen. A bright window or a TV in view reads as a bright room. The hub's own display lights the
+scene a little, so dimming the display for Night Mode makes the reading slightly darker, which the
+gap between the two bounds absorbs. The lux figures assume the camera's reported ISO is calibrated
+like a photographic one, which has not been checked.
+
 ## Security model
 
 State this to users the way it is stated here.
@@ -359,7 +444,7 @@ bundle.
 | `face.touchIDUnlock` | Unlock with Touch ID | Toggle | On | |
 | `face.matchStrictness` | Match Strictness | Choice | `standard` | `relaxed`, `standard`, `strict` |
 | `face.lockDelaySeconds` | Lock After Face Is Lost | Choice | `3` | `1`, `3`, `5`, `10`, `30` |
-| `face.nearDistance` | Show More Detail When | Choice | `standard` | `closer`, `standard`, `farther` |
+| `face.nearDistance` | Detail Distance | Choice | `standard` | `closer`, `standard`, `farther` |
 
 Adding people and enrolling faces are setup tasks, not preferences. They are in `PeopleSetupView`,
 which the app shows while Setup Mode is on.
@@ -451,7 +536,8 @@ these on the target iPad, in the room where it will stand:
 | Pose buckets | `HeadPoseBucketing` | Check that a comfortable head turn reaches each bucket. |
 | Capture quality bounds | `EnrollmentPolicy`, `RecognitionEngineConfiguration` | Check typical `faceCaptureQuality` values in the room's light. |
 | Depth liveness | `DepthLivenessPolicy` | Compare plane residual and center relief for real faces against a printed photo, a phone, and a tablet, at several distances. |
-| Near and far | `ProximityPolicy`, "Show More Detail When" | Check the face size fraction at the distances that should count as near. |
+| Zone boundaries | `ProximityPolicy`, `FaceDistanceModel.typicalFaceHeight`, "Detail Distance" | Stand at 1.0 m and 2.5 m with a tape measure and compare with `service.faceDistance`, for adults and children, with and without depth. |
+| Dark room | `AmbientLightPolicy` | Read `service.roomBrightness` in the room at night, with a lamp, and in daylight, and set `darkEnter` and `darkExit` between the night and lamp readings. |
 | Frame rates | `FrameRatePolicy` | Measure energy use and time to recognition. |
 
 ## Not verified
@@ -466,6 +552,12 @@ these on the target iPad, in the room where it will stand:
   seen on a device.
 - The Touch ID unlock has not run on a device. Its decision flow is unit-tested with a fake
   prompt. The real prompt, the hidden fallback button, and the lockout path are untested.
+- The distance estimate has not been compared with a tape measure. The typical face height, the
+  field of view the device reports, and the depth median are all untested against a real camera.
+- The room brightness has not been read in a real room. Whether the front camera reports usable
+  ISO, exposure duration, and target offset values, what they are in the dark, and where the
+  dark-room thresholds should sit can only be found on a device.
+- Turning Center Stage off has not been checked on an iPad that has it.
 
 ## Sources
 
@@ -473,4 +565,6 @@ these on the target iPad, in the room where it will stand:
 - `docs/FACE_MODEL.md` and `HomePad/Models/NOTICE.md` in this repository, for the SFace contract, thresholds, and license
 - Vision header `VNObservation.h` in the iOS 27.2 SDK, for the yaw, pitch, roll, and capture quality definitions
 - AVFoundation headers `AVCaptureSession.h` and `AVCaptureDevice.h` in the iOS 27.2 SDK, for multitasking camera access and the rotation coordinator
+- AVFoundation header `AVCaptureDevice.h` in the iOS 27.2 SDK, for `videoFieldOfView`, `geometricDistortionCorrectedVideoFieldOfView`, `ISO`, `exposureDuration`, `exposureTargetOffset`, and the Center Stage control mode
+- `docs/DESIGN_SPEC.md`, section 2 and "State 2: Night Mode", for the zone distances and the Night Mode trigger
 - LocalAuthentication headers `LAContext.h`, `LAError.h`, and `LAPublicDefines.h` in the iOS 27.2 SDK, for the biometrics-only policy, the fallback button, the error codes, and `NSFaceIDUsageDescription`

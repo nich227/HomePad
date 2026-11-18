@@ -68,7 +68,9 @@ func frame(
     depth: FaceDepthStatistics? = nil,
     eyeOpenness: Float? = nil,
     faces: Int = 1,
-    position: FaceViewerPosition? = nil
+    position: FaceViewerPosition? = nil,
+    distance: Double? = 0.6,
+    light: SceneLightSample? = nil
 ) throws -> FaceFrameObservation {
     FaceFrameObservation(
         timestamp: timestamp,
@@ -80,7 +82,9 @@ func frame(
             embedding: try degrees.map { try vector($0, model: model) },
             depth: depth,
             eyeOpenness: eyeOpenness,
-            viewerPosition: position
-        )
+            viewerPosition: position,
+            distance: distance.map { FaceDistanceEstimate(meters: $0, source: .faceSize) }
+        ),
+        light: light
     )
 }

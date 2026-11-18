@@ -67,14 +67,14 @@ public enum FaceSettings {
         ),
         SettingDescriptor(
             nearDistance,
-            title: "Show More Detail When",
+            title: "Detail Distance",
             pane: pane,
             options: [
-                .init(title: "Very close", value: NearDistance.closer.rawValue),
-                .init(title: "Close", value: NearDistance.standard.rawValue),
-                .init(title: "Across the room", value: NearDistance.farther.rawValue),
+                .init(title: "Closer", value: NearDistance.closer.rawValue),
+                .init(title: "Standard", value: NearDistance.standard.rawValue),
+                .init(title: "Farther", value: NearDistance.farther.rawValue),
             ],
-            footer: "How close a person must be before the hub switches from the far layout to the near layout."
+            footer: "The hub shows the most detail to someone within arm's reach, less at mid range, and the least from across the room. Standard puts arm's reach at about 1 m (3 ft) and across the room at about 2.5 m (8 ft). Closer moves both about a quarter nearer to the screen, and Farther about a third farther away. Distances are estimates."
         ),
     ]
 }

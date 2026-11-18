@@ -13,14 +13,18 @@ public struct FaceRecognitionConfiguration: Sendable {
     public var analyzer: FaceAnalyzer.Configuration
     /// Faces below this capture quality are not sent to the embedding model.
     public var minimumQualityForEmbedding: Float
+    /// Smoothing and thresholds for the room brightness estimate.
+    public var ambientLight: AmbientLightPolicy
 
     public init(
         engine: RecognitionEngineConfiguration = RecognitionEngineConfiguration(),
         enrollment: EnrollmentPolicy = EnrollmentPolicy(),
         frameRates: FrameRatePolicy = FrameRatePolicy(),
         analyzer: FaceAnalyzer.Configuration = FaceAnalyzer.Configuration(),
-        minimumQualityForEmbedding: Float = 0.1
+        minimumQualityForEmbedding: Float = 0.1,
+        ambientLight: AmbientLightPolicy = AmbientLightPolicy()
     ) {
+        self.ambientLight = ambientLight
         self.engine = engine
         self.enrollment = enrollment
         self.frameRates = frameRates
@@ -93,7 +97,19 @@ public final class FaceRecognitionService {
     /// It is smoothed, and it changes only when the face has moved noticeably.
     public private(set) var facePosition: FaceViewerPosition?
     public private(set) var lastDecision = RecognitionOutcome.nobody
+    /// Which of the three distance zones the primary face is in. `.far` when nobody is in view.
     public private(set) var proximity = Proximity.far
+    /// Estimated distance of the primary face, rounded to 5 cm, and whether it came from the
+    /// depth camera or from the size of the face. `nil` when no face is in view or the distance
+    /// could not be estimated. Meant for calibration and diagnostics. Layouts read `proximity`.
+    public private(set) var faceDistance: FaceDistanceEstimate?
+    /// Estimated brightness of the room in 0...1, smoothed. It comes from the camera's exposure,
+    /// not from a light sensor, so it is an estimate of what the front camera sees. `nil` while
+    /// the camera is not running, frames are not analyzed, or the camera has just started.
+    public private(set) var roomBrightness: Double?
+    /// Whether the room is dark enough for Night Mode. It changes only after the brightness has
+    /// stayed past the threshold for several seconds. `nil` whenever `roomBrightness` is `nil`.
+    public private(set) var isRoomDark: Bool?
     /// Members who have a stored face template.
     public private(set) var enrolledProfileIDs: Set<UUID> = []
     public private(set) var enrollment: FaceEnrollmentStatus?
@@ -128,6 +144,7 @@ public final class FaceRecognitionService {
     @ObservationIgnored private var enrollmentLiveness: LivenessTracker
     @ObservationIgnored private var enrollmentGuidance = EnrollmentGuidance()
     @ObservationIgnored private var positionSmoother = FacePositionSmoother()
+    @ObservationIgnored private var ambientLight: AmbientLightEstimator
 
     @ObservationIgnored private var isRequested = false
     @ObservationIgnored private var isMirrorActive = false
@@ -169,6 +186,7 @@ public final class FaceRecognitionService {
         self.engine = RecognitionEngine(configuration: preferences.applied(to: configuration.engine))
         self.governor = FrameRateGovernor(policy: configuration.frameRates)
         self.enrollmentLiveness = LivenessTracker(policy: configuration.engine.liveness)
+        self.ambientLight = AmbientLightEstimator(policy: configuration.ambientLight)
         self.knownProfileIDs = Set(session.profiles.map(\.id))
         self.isForeground = UIApplication.shared.applicationState != .background
 
@@ -327,6 +345,15 @@ public final class FaceRecognitionService {
         if positionSmoother.update(with: observation.primary?.viewerPosition) {
             facePosition = positionSmoother.position
         }
+        if ambientLight.update(with: observation.light, at: observation.timestamp) {
+            publishAmbientLight()
+        }
+        let distance = observation.primary?.distance.map {
+            FaceDistanceEstimate(meters: ($0.meters * 20).rounded() / 20, source: $0.source)
+        }
+        if faceDistance != distance {
+            faceDistance = distance
+        }
         // Recognition pauses for as long as an enrollment screen is up, in any of its phases.
         if enrollmentSession != nil {
             handleEnrollment(observation)
@@ -349,6 +376,21 @@ public final class FaceRecognitionService {
         }
     }
 
+    private func publishAmbientLight() {
+        if roomBrightness != ambientLight.level {
+            roomBrightness = ambientLight.level
+        }
+        if isRoomDark != ambientLight.isRoomDark {
+            isRoomDark = ambientLight.isRoomDark
+        }
+    }
+
+    /// The room is unknown whenever frames stop being analyzed.
+    private func resetAmbientLight() {
+        ambientLight.reset()
+        publishAmbientLight()
+    }
+
     private func resetRecognition() {
         engine = RecognitionEngine(configuration: preferences.applied(to: configuration.engine))
         if isFacePresent {
@@ -357,6 +399,9 @@ public final class FaceRecognitionService {
         positionSmoother.reset()
         if facePosition != nil {
             facePosition = nil
+        }
+        if faceDistance != nil {
+            faceDistance = nil
         }
         let changed = lastDecision != .nobody || session.isSomeonePresent
         publish(RecognitionUpdate(outcome: .nobody, proximity: .far, isFacePresent: false, liveness: nil, didChange: changed))
@@ -445,6 +490,7 @@ public final class FaceRecognitionService {
         case .interrupted(let reason):
             cameraState = .interrupted(reason)
             resetRecognition()
+            resetAmbientLight()
         case .interruptionEnded:
             cameraState = .running
         case .runtimeError:
@@ -452,6 +498,7 @@ public final class FaceRecognitionService {
             isAnalyzing = false
             cameraState = .stopped
             resetRecognition()
+            resetAmbientLight()
             // One restart attempt per stretch of time, so a camera that keeps failing does not
             // spin.
             let now = ProcessInfo.processInfo.systemUptime
@@ -513,6 +560,7 @@ public final class FaceRecognitionService {
         if isAnalyzing, !analyzes {
             isAnalyzing = false
             resetRecognition()
+            resetAmbientLight()
         }
         isAnalyzing = analyzes
         showsPreview = plan.showsPreview
