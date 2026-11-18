@@ -53,7 +53,7 @@ capabilities on that team.
 |---|---|
 | `HomePad/` | The app target: wiring, scenes, assets, the model, the Settings bundle |
 | `Extensions/` | The share extension and the iMessage extension |
-| `Packages/` | One Swift package per feature, each with a host-tested Core target |
+| `Packages/` | One Swift package per feature, each with a unit-tested Core target |
 | `Scripts/` | Build, test, Settings bundle, icon, and screenshot scripts |
 | `Config/` | Shared build settings and the kiosk profile |
 | `docs/` | One document per feature |
@@ -62,11 +62,18 @@ capabilities on that team.
 ## Checks
 
 ```sh
-Scripts/test-package.sh HomePadFace      # unit tests for one package, on the Mac
+Scripts/test-package.sh HomePadFace      # unit tests for one package, on the iPhone simulator
 Scripts/build-app.sh                     # build for the iPad simulator
 Scripts/ui-walkthrough.sh                # launch, walk the hub, save screenshots
 Scripts/generate-settings.sh --check     # Settings bundle matches the code
+Scripts/generate-settings.sh             # rewrite the Settings bundle from the code
 ```
+
+Everything builds for iOS and iPadOS only, and the unit tests run on the iOS simulator. The test
+script starts the simulator (iPhone 18 Pro unless you name another as the second argument), prints
+the test summary and the line coverage of the package's Core target, and shuts the simulator down.
+A run takes about a minute and a half. Run one script at a time, because each simulator needs a
+few gigabytes of memory.
 
 ## Licenses
 

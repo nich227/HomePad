@@ -5,6 +5,9 @@ iPadOS and iOS 26+ app. iPad is the hub, iPhone is the companion. Root: this dir
 ## Invariants
 
 1. iOS and iPadOS only, deployment target 26.0. No macOS, Catalyst, visionOS, tvOS, watchOS.
+   Every `Package.swift` declares `platforms: [.iOS(.v26)]` and nothing else. Unit tests run on
+   the iOS simulator through `Scripts/test-package.sh`, never on the Mac. No package has an
+   executable target.
 2. Every preference is a `SettingKey` with a `SettingDescriptor`, shown by `HomePad/Settings.bundle`.
    No in-app control changes a preference. The app never writes a preference.
 3. `HomePad/Settings.bundle/*.plist` are generated. Never edit them by hand.
@@ -45,11 +48,21 @@ iPadOS and iOS 26+ app. iPad is the hub, iPhone is the companion. Root: this dir
 | `Packages/HomePadMessaging` | Projection templates and protocol, message relay, App Intents, notes |
 | `Packages/HomePadKiosk` | Kiosk state machine, Single App Mode, passcode prompt |
 | `Packages/HomePadAnimations` | Lottie wrapper, generated animations, `Tools/generate_animations.py` |
-| `Packages/HomePadSettingsCatalog` | All descriptors, Settings bundle writer, `homepad-settings` tool |
+| `Packages/HomePadSettingsCatalog` | All descriptors, Settings bundle writer, the test that writes `Settings.bundle` |
 | `docs/` | `UI`, `FACE_RECOGNITION`, `FACE_MODEL`, `BEAM`, `MESSAGING`, `KIOSK`, `ANIMATIONS` |
 
-Each feature package has `<Name>Core` (pure logic, host-tested) and `<Name>` (iOS frameworks,
-SwiftUI). Put decisions in Core. The manifest drops the iOS target when `HOMEPAD_HOST_TESTS` is set.
+Each feature package has `<Name>Core` (pure logic, unit-tested, 100% line coverage) and `<Name>`
+(iOS frameworks, SwiftUI, no unit tests). Put decisions in Core. Both targets are always in the
+manifest. Tests are Swift Testing in `Tests/<Name>CoreTests` and run on the iOS simulator.
+
+| Package | Test scheme | Coverage target |
+|---|---|---|
+| `HomePadCore` | `HomePadCore` | `HomePadCore` |
+| `HomePadSettingsCatalog` | `HomePadSettingsCatalog` | `HomePadSettingsCatalog` |
+| every other package | `<Name>-Package` | `<Name>Core` |
+
+`Scripts/test-package.sh` picks the scheme. A test reads an environment variable `<NAME>` when the
+caller sets `TEST_RUNNER_<NAME>`; a test in the simulator can read and write this Mac's files.
 
 ## When you change X, also change Y
 
@@ -71,7 +84,9 @@ SwiftUI). Put decisions in Core. The manifest drops the iOS target when `HOMEPAD
 
 | Need | Command |
 |---|---|
-| Unit tests for one package (Mac host, with coverage) | `Scripts/test-package.sh <Package>` |
+| Unit tests for one package (iOS simulator, with coverage) | `Scripts/test-package.sh <Package> ["simulator name"]` |
+| One suite or test of a package (no coverage) | `Scripts/test-package.sh <Package> "iPhone 18 Pro" -only-testing:<TestTarget>/<Suite>` |
+| Uncovered lines of one file after a test run | `xcrun xccov view --report --functions-for-file <File>.swift build/test-<Package>.xcresult` |
 | Compile one package for an iOS device | `Scripts/build-package.sh <Package>` |
 | Regenerate the Settings bundle | `Scripts/generate-settings.sh` |
 | Check the Settings bundle is current | `Scripts/generate-settings.sh --check` |
@@ -80,15 +95,28 @@ SwiftUI). Put decisions in Core. The manifest drops the iOS target when `HOMEPAD
 | Walk the hub in the simulator, save screenshots | `Scripts/ui-walkthrough.sh` |
 | Tile the screenshots into one image | `Scripts/contact-sheet.py <out.jpg> "<glob>"` |
 | Regenerate animations / check them | `python3 Packages/HomePadAnimations/Tools/generate_animations.py [--check]` |
+| Write animation preview sheets | `TEST_RUNNER_HOMEPAD_ANIMATION_PREVIEW_DIR="$PWD/Packages/HomePadAnimations/Tools/preview" Scripts/test-package.sh HomePadAnimations "iPhone 18 Pro" -only-testing:HomePadAnimationsCoreTests/PreviewFrameTests` |
 | Verify the face model against its fixtures | `xcrun coremlcompiler compile HomePad/Models/FaceEmbedder.mlpackage <dir>` then `swift Scripts/verify-face-model.swift <dir>/FaceEmbedder.mlmodelc Scripts/face-model-fixtures` |
 
-Builds are capped (`nice`, `-j 3` or `-jobs 4`). Run one at a time. Check free memory and disk
+Builds are capped (`nice`, `-jobs 3` or `-jobs 4`). Run one at a time. Check free memory and disk
 before booting a simulator: the runtime is 8 GB and a booted iPad needs several GB of RAM.
+
+| Script | Simulator | Default device | Shuts it down |
+|---|---|---|---|
+| `Scripts/test-package.sh` | boots | iPhone 18 Pro | yes |
+| `Scripts/generate-settings.sh` | boots (through `test-package.sh`) | iPhone 18 Pro | yes |
+| `Scripts/ui-walkthrough.sh` | boots | iPad Pro 13-inch (M5) | yes |
+| `Scripts/build-app.sh`, `Scripts/build-package.sh` | no | | |
+
+`Scripts/test-package.sh` writes `build/DerivedData-<Package>`, `build/test-<Package>.xcresult`,
+and `$TMPDIR/homepad-test-<Package>.log`. It exits non-zero when the build or a test fails.
 
 ## Verify before finishing
 
 1. `Scripts/test-package.sh` for every package you touched. Core targets hold 100% line coverage.
+   The script prints `coverage <Target>: <percent>` and each file below 100%.
 2. `Scripts/generate-settings.sh --check`
 3. `Scripts/build-app.sh` exits 0.
 4. `Scripts/ui-walkthrough.sh` passes, and the screenshots in `design/screenshots` look right.
 5. `grep -rn "NWListener\|listen(" Packages HomePad Extensions` shows only `PeerLink.swift`.
+6. `grep -rn "macOS\|AppKit" --include="*.swift" Packages HomePad Extensions HomePadUITests` shows nothing.

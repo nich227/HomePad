@@ -84,16 +84,20 @@ python3 Tools/generate_animations.py --list     # name, frames, loop or once, ti
 The output is deterministic: the same script always writes the same bytes. The unit tests do not
 run Python, so run `--check` before you commit a change to the script or to the files.
 
-To look at the result, render preview sheets on the Mac. Each sheet shows six evenly spaced
-frames on black:
+To look at the result, render preview sheets. Each sheet shows six evenly spaced frames on
+black. The unit tests draw them in the iOS simulator and write them to the directory you name:
 
 ```sh
-HOMEPAD_ANIMATION_PREVIEW_DIR="$PWD/Packages/HomePadAnimations/Tools/preview" \
-  Scripts/test-package.sh HomePadAnimations --filter PreviewFrameTests
+TEST_RUNNER_HOMEPAD_ANIMATION_PREVIEW_DIR="$PWD/Packages/HomePadAnimations/Tools/preview" \
+  Scripts/test-package.sh HomePadAnimations "iPhone 18 Pro" \
+  -only-testing:HomePadAnimationsCoreTests/PreviewFrameTests
 ```
 
-The sheets under `Tools/preview/` are drawn by Lottie's main thread engine on the host. The app
-uses the Core Animation engine on the device, which has not been watched on hardware yet.
+xcodebuild hands the variable to the tests as `HOMEPAD_ANIMATION_PREVIEW_DIR`. Without it, the
+preview test does nothing.
+
+The sheets under `Tools/preview/` are drawn by Lottie's main thread engine in the simulator. The
+app uses the Core Animation engine on the device, which has not been watched on hardware yet.
 
 ## Adding an animation
 

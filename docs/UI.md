@@ -5,7 +5,7 @@ on the iPhone companion. It has two targets:
 
 | Target | What it holds |
 |---|---|
-| `HomePadUICore` | Pure logic, tested on the Mac host: clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, night mode, the recipe parser, Flow face math, the canvas layout, and `UISettings`. |
+| `HomePadUICore` | Pure logic, unit-tested on the iOS simulator: clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, night mode, the recipe parser, Flow face math, the canvas layout, and `UISettings`. |
 | `HomePadUI` | SwiftUI views and the services behind them (HomeKit, Music, camera, WeatherKit, Photos). |
 
 ## How the app target uses it

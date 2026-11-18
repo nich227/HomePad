@@ -18,8 +18,12 @@ Project root: `/Volumes/workplace/HomePad/src/HomePad`
    files, or logs. Secrets and biometric templates go in the Keychain with
    `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 6. Never log message bodies, URLs with query strings, face embeddings, or pairing secrets.
-7. This machine is shared and already loaded. Build only through the two scripts below. Never run
-   `xcodebuild` or `swift build` with default parallelism, and never run two builds at once.
+7. This machine is shared and already loaded. Build and test only through the two scripts below.
+   Never run `xcodebuild` with default parallelism, never run two builds at once, and never boot
+   a simulator yourself. The test script boots one and shuts it down.
+8. No package declares or targets macOS. `platforms` is `[.iOS(.v26)]`, there is no executable
+   target, and unit tests run on the iOS simulator. Do not use SwiftPM's command-line build, test,
+   or run commands: they build for the Mac.
 
 ## Package layout (every feature package)
 
@@ -28,41 +32,35 @@ Packages/<Name>/
   Package.swift
   Sources/<Name>Core/      pure logic: Foundation, CryptoKit, Accelerate, Observation only
   Sources/<Name>/          iOS frameworks, SwiftUI views, services
-  Tests/<Name>CoreTests/   Swift Testing, runs on the Mac host
+  Tests/<Name>CoreTests/   Swift Testing, runs on the iOS simulator
 ```
 
-The Mac has **no iOS simulator runtime**, so unit tests run on the macOS host. That only works for
-code with no UIKit, AVFoundation, Vision, GroupActivities, or other iOS-only imports. So put every
-decision, state machine, codec, and policy in `<Name>Core` and keep `<Name>` a thin shell around
-system frameworks. The iOS target is verified by compiling it for a device.
+Unit tests run on the iOS simulator and cover `<Name>Core` only. Code that needs a camera, a
+paired device, an entitlement, or a person cannot be unit-tested there. So put every decision,
+state machine, codec, and policy in `<Name>Core` and keep `<Name>` a thin shell around system
+frameworks. The `<Name>` target is verified by compiling it for a device.
 
-Use this manifest shape. The host-test switch drops the iOS-only target so `swift test` does not
-try to compile UIKit code for macOS:
+Use this manifest shape. Both targets are always present, and the test target depends on Core only:
 
 ```swift
 // swift-tools-version: 6.2
-import Foundation
 import PackageDescription
 
-let hostTests = ProcessInfo.processInfo.environment["HOMEPAD_HOST_TESTS"] != nil
-let platforms: [SupportedPlatform] = hostTests ? [.iOS(.v26), .macOS(.v26)] : [.iOS(.v26)]
-
-var products: [Product] = [.library(name: "<Name>Core", targets: ["<Name>Core"])]
-var targets: [Target] = [
-    .target(name: "<Name>Core", dependencies: [.product(name: "HomePadCore", package: "HomePadCore")]),
-    .testTarget(name: "<Name>CoreTests", dependencies: ["<Name>Core"]),
-]
-if !hostTests {
-    products.append(.library(name: "<Name>", targets: ["<Name>"]))
-    targets.append(.target(name: "<Name>", dependencies: ["<Name>Core", .product(name: "HomePadCore", package: "HomePadCore")]))
-}
+let core = Target.Dependency.product(name: "HomePadCore", package: "HomePadCore")
 
 let package = Package(
     name: "<Name>",
-    platforms: platforms,
-    products: products,
+    platforms: [.iOS(.v26)],
+    products: [
+        .library(name: "<Name>Core", targets: ["<Name>Core"]),
+        .library(name: "<Name>", targets: ["<Name>"]),
+    ],
     dependencies: [.package(path: "../HomePadCore")],
-    targets: targets
+    targets: [
+        .target(name: "<Name>Core", dependencies: [core]),
+        .target(name: "<Name>", dependencies: ["<Name>Core", core]),
+        .testTarget(name: "<Name>CoreTests", dependencies: ["<Name>Core"]),
+    ]
 )
 ```
 
@@ -70,15 +68,26 @@ let package = Package(
 
 | Need | Command (from the project root) |
 |---|---|
-| Unit tests on the host, with coverage | `Scripts/test-package.sh <Name>` |
+| Unit tests on the iOS simulator, with coverage | `Scripts/test-package.sh <Name>` |
+| One suite, no coverage | `Scripts/test-package.sh <Name> "iPhone 18 Pro" -only-testing:<Name>CoreTests/<Suite>` |
 | Compile the package for an iOS device | `Scripts/build-package.sh <Name>` |
-| Coverage JSON path | `cd Packages/<Name> && HOMEPAD_HOST_TESTS=1 swift test --show-codecov-path` |
+| Coverage of each target | `xcrun xccov view --report --only-targets build/test-<Name>.xcresult` |
+| Coverage of each function in a file | `xcrun xccov view --report --functions-for-file <File>.swift build/test-<Name>.xcresult` |
 | iOS SDK path, to check an API exists | `xcrun --sdk iphoneos --show-sdk-path` |
 
-Both scripts are capped (`-j 3`, `nice`). Redirect long output to a file and grep it.
-`Scripts/build-package.sh` builds the scheme named after the package. If your package has several
-library products, xcodebuild generates a `<Name>-Package` scheme; if the plain scheme is missing,
-tell me in your report and build with `-scheme <Name>-Package` using the same flags as the script.
+Both scripts are capped (`-jobs 3`, `nice`) and write their full output to a log under `$TMPDIR`.
+`Scripts/test-package.sh` boots the "iPhone 18 Pro" simulator, prints the Swift Testing summary,
+any failures, and the line coverage of `<Name>Core`, then shuts the simulator down. It finds the
+scheme itself: a package with several library products has a `<Name>-Package` scheme that holds
+the tests. A test run takes about a minute and a half, most of it the simulator starting.
+
+To pass a value to a test, set `TEST_RUNNER_<NAME>` before the script. xcodebuild hands it to the
+test process as `<NAME>`. A test in the simulator can read and write files on the Mac, so `#filePath`
+and absolute paths work.
+
+`Scripts/build-package.sh` builds the scheme named after the package. If the plain scheme is
+missing, tell me in your report and build with `-scheme <Name>-Package` using the same flags as
+the script.
 
 When you are not sure an API exists in this SDK, check the `.swiftinterface` or header under the
 SDK path before using it. Do not guess. iOS 26 and 27 APIs are fine to use (Liquid Glass

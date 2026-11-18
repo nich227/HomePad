@@ -9,7 +9,7 @@ The code is in `Packages/HomePadFace`:
 
 | Target | Holds | Tested |
 |---|---|---|
-| `HomePadFaceCore` | Every decision: matching, enrollment, stabilizing, liveness, proximity, alignment math, settings keys | Unit tests on the Mac host, 100% line coverage |
+| `HomePadFaceCore` | Every decision: matching, enrollment, stabilizing, liveness, proximity, alignment math, settings keys | Unit tests on the iOS simulator, 100% line coverage |
 | `HomePadFace` | Camera, Vision, Core ML, Keychain, SwiftUI views | Compiled for a device. Not run on one yet |
 
 Read "Security model" before you rely on this for anything. In short: it is convenience
