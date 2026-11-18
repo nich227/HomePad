@@ -53,6 +53,16 @@ import Testing
         #expect(HomeControlPolicy.mayOperate(light, turningOn: false, isGuest: true))
     }
 
+    @Test func mayRunScenes_whenOnlyAFaceMatch_thenAllowed() {
+        let member = HouseholdProfile(name: "Erica", tint: .purple)
+        let stranger = UUID()
+        #expect(!HomeControlPolicy.mayRunScenes(activation: .none, profiles: [member]))
+        #expect(!HomeControlPolicy.mayRunScenes(activation: .manual(member.id), profiles: [member]))
+        #expect(HomeControlPolicy.mayRunScenes(activation: .face(member.id, at: Fixtures.date()), profiles: [member]))
+        #expect(!HomeControlPolicy.mayRunScenes(activation: .face(stranger, at: Fixtures.date()), profiles: [member]))
+        #expect(!HomeControlPolicy.mayRunScenes(activation: .face(member.id, at: Fixtures.date()), profiles: []))
+    }
+
     @Test func stepped_whenFahrenheit_thenOneDisplayedDegree() {
         let up = ThermostatMath.stepped(targetCelsius: 20, direction: 1, unit: .fahrenheit)
         #expect(TemperatureUnit.fahrenheit.rounded(fromCelsius: up) == 69)

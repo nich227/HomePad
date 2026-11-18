@@ -1,4 +1,5 @@
 import Foundation
+import HomePadCore
 
 public enum HomeAccessoryKind: String, Sendable, CaseIterable {
     case light, outlet, fan, lock, other
@@ -155,6 +156,14 @@ public enum HomeControlPolicy {
     public static func mayOperate(_ accessory: HomeAccessory, turningOn: Bool, isGuest: Bool) -> Bool {
         let isUnlocking = accessory.kind == .lock && !turningOn
         return !(isUnlocking && isGuest)
+    }
+
+    /// A scene can do anything, including unlock a door, so only a household member the hub
+    /// has recognized by face may run one. Picking a profile by hand is not enough, the same
+    /// as for personal content.
+    public static func mayRunScenes(activation: ProfileActivation, profiles: [HouseholdProfile]) -> Bool {
+        guard case .face(let id, _) = activation else { return false }
+        return profiles.contains { $0.id == id }
     }
 }
 
