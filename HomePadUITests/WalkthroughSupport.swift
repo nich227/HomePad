@@ -10,6 +10,13 @@ class WalkthroughCase: XCTestCase {
 
     var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    /// The small iPad stands in for a folding iPhone, whose displays this machine cannot
+    /// simulate. Its screen is large enough to frame both of them.
+    var isDuoStandIn: Bool {
+        let bounds = UIScreen.main.bounds
+        return isPad && min(bounds.width, bounds.height) < 800
+    }
+
     /// The app reads these only in debug builds. None is set in normal use.
     enum Hook {
         static let ephemeral = ["HOMEPAD_UITEST_EPHEMERAL": "1"]
@@ -19,6 +26,11 @@ class WalkthroughCase: XCTestCase {
         static let fill = ["HOMEPAD_UITEST_CANVAS": "fill"]
         static let night = ["HOMEPAD_UITEST_NIGHT": "1"]
         static let deviceUnlock = ["HOMEPAD_UITEST_DEVICE_UNLOCK": "1"]
+        static let skipWelcome = ["HOMEPAD_UITEST_SKIP_WELCOME": "1"]
+        static let fold = ["HOMEPAD_UITEST_FOLD": "1"]
+        static func role(_ value: String) -> [String: String] { ["HOMEPAD_UITEST_ROLE": value] }
+        /// Frames the whole app to a size in points, for example "626x890".
+        static func viewport(_ value: String) -> [String: String] { ["HOMEPAD_UITEST_VIEWPORT": value] }
     }
 
     override func setUp() async throws {
@@ -79,6 +91,43 @@ class WalkthroughCase: XCTestCase {
         let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name).png")
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         try? screenshot.pngRepresentation.write(to: url)
+    }
+
+    func openHomeScreen() {
+        let button = app.buttons["hub.showHomeScreen"]
+        if button.waitForExistence(timeout: 5), button.isHittable {
+            button.tap()
+        } else {
+            app.swipeUp()
+        }
+        XCTAssertTrue(app.scrollViews["hub.homeScreen"].waitForExistence(timeout: 8), "the Home Screen did not open")
+        pause(1.5)
+    }
+
+    /// Finds an icon on the Home Screen, scrolling if it is below the fold, and taps it.
+    func tapApp(_ id: String) -> Bool {
+        let icon = app.buttons["app.\(id)"]
+        let scroll = app.scrollViews["hub.homeScreen"]
+        guard icon.waitForExistence(timeout: 4) else {
+            note("icon \(id) is not on the Home Screen")
+            XCTFail("icon \(id) is not on the Home Screen")
+            return false
+        }
+        for _ in 0..<4 where !icon.isHittable {
+            scroll.swipeUp(velocity: .slow)
+            pause(0.8)
+        }
+        guard icon.isHittable else {
+            note("icon \(id) could not be reached by scrolling")
+            XCTFail("icon \(id) could not be reached by scrolling")
+            return false
+        }
+        icon.tap()
+        pause(2)
+        if allowSystemPrompts(wait: 1) > 0 {
+            note("a prompt was answered when \(id) opened")
+        }
+        return true
     }
 
     func slug(_ text: String) -> String {

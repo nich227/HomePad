@@ -8,7 +8,7 @@ final class HubWalkthroughTests: WalkthroughCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        try XCTSkipUnless(isPad, "The hub walkthrough runs on an iPad.")
+        try XCTSkipUnless(isPad && !isDuoStandIn, "The hub walkthrough runs on a large iPad.")
         XCUIDevice.shared.orientation = .landscapeLeft
     }
 
@@ -231,43 +231,6 @@ final class HubWalkthroughTests: WalkthroughCase {
         note("\(prefix) faces seen in order: \(seen.joined(separator: ", "))")
         XCTAssertEqual(seen.count, Self.faceCount, "expected every face once, saw \(seen)")
         XCTAssertEqual(seen.last, "Rainbow", "the last face should be Rainbow")
-    }
-
-    private func openHomeScreen() {
-        let button = app.buttons["hub.showHomeScreen"]
-        if button.waitForExistence(timeout: 5), button.isHittable {
-            button.tap()
-        } else {
-            app.swipeUp()
-        }
-        XCTAssertTrue(app.scrollViews["hub.homeScreen"].waitForExistence(timeout: 8), "the Home Screen did not open")
-        pause(1.5)
-    }
-
-    /// Finds an icon on the Home Screen, scrolling if it is below the fold, and taps it.
-    private func tapApp(_ id: String) -> Bool {
-        let icon = app.buttons["app.\(id)"]
-        let scroll = app.scrollViews["hub.homeScreen"]
-        guard icon.waitForExistence(timeout: 4) else {
-            note("icon \(id) is not on the Home Screen")
-            XCTFail("icon \(id) is not on the Home Screen")
-            return false
-        }
-        for _ in 0..<4 where !icon.isHittable {
-            scroll.swipeUp(velocity: .slow)
-            pause(0.8)
-        }
-        guard icon.isHittable else {
-            note("icon \(id) could not be reached by scrolling")
-            XCTFail("icon \(id) could not be reached by scrolling")
-            return false
-        }
-        icon.tap()
-        pause(2)
-        if allowSystemPrompts(wait: 1) > 0 {
-            note("a prompt was answered when \(id) opened")
-        }
-        return true
     }
 
     private func openApp(_ id: String, snapshotName: String) {
