@@ -3,7 +3,7 @@ import Lottie
 import Testing
 @testable import HomePadAnimationsCore
 
-/// Draws frames on the host and checks the pixels.
+/// Draws frames into a bitmap and checks the pixels.
 @MainActor @Suite struct AnimationRenderTests {
     private static let red = LottieColor(r: 1, g: 0, b: 0, a: 1)
 

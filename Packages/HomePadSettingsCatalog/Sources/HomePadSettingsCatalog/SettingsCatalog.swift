@@ -6,7 +6,8 @@ import HomePadMessagingCore
 import HomePadUICore
 
 /// Every preference the app reads, in the order the Settings app shows them. The app registers
-/// these defaults at launch, and `homepad-settings` writes `Settings.bundle` from the same list.
+/// these defaults at launch, and `Scripts/generate-settings.sh` writes `Settings.bundle` from the
+/// same list.
 public enum SettingsCatalog {
     public static let rootPane = GeneralSettings.pane
 

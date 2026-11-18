@@ -78,7 +78,7 @@ enum RenderError: Error {
     case cannotWrite
 }
 
-/// Draws frames of a bundled animation into a bitmap on the host, with no window or screen.
+/// Draws frames of a bundled animation into a bitmap, with no window or screen.
 /// It uses the main thread rendering engine, because that engine writes each frame into the
 /// model layer tree, which is what `CALayer.render(in:)` draws.
 @MainActor
@@ -112,8 +112,8 @@ struct AnimationRenderer {
                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             )
         else { throw RenderError.noContext }
-        // Lottie lays content out with the origin at the top left, and a bare CALayer on the
-        // host has it at the bottom left.
+        // Lottie lays content out with the origin at the top left, and a bitmap context has it
+        // at the bottom left.
         context.translateBy(x: 0, y: CGFloat(side))
         context.scaleBy(x: 1, y: -1)
         // The animation's own layer draws in canvas coordinates. The wrapper layer does not

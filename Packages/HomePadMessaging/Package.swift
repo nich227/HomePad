@@ -1,26 +1,22 @@
 // swift-tools-version: 6.2
-import Foundation
 import PackageDescription
 
-// The product is iOS and iPadOS only. Scripts/test-package.sh sets HOMEPAD_HOST_TESTS so the
-// pure-logic target can be tested on the Mac that builds it; the iOS-only target is dropped then.
-let hostTests = ProcessInfo.processInfo.environment["HOMEPAD_HOST_TESTS"] != nil
-let platforms: [SupportedPlatform] = hostTests ? [.iOS(.v26), .macOS(.v26)] : [.iOS(.v26)]
-
-var products: [Product] = [.library(name: "HomePadMessagingCore", targets: ["HomePadMessagingCore"])]
-var targets: [Target] = [
-    .target(
-        name: "HomePadMessagingCore",
-        dependencies: [.product(name: "HomePadCore", package: "HomePadCore")]
-    ),
-    .testTarget(
-        name: "HomePadMessagingCoreTests",
-        dependencies: ["HomePadMessagingCore", .product(name: "HomePadCore", package: "HomePadCore")]
-    ),
-]
-if !hostTests {
-    products.append(.library(name: "HomePadMessaging", targets: ["HomePadMessaging"]))
-    targets.append(
+let package = Package(
+    name: "HomePadMessaging",
+    platforms: [.iOS(.v26)],
+    products: [
+        .library(name: "HomePadMessagingCore", targets: ["HomePadMessagingCore"]),
+        .library(name: "HomePadMessaging", targets: ["HomePadMessaging"]),
+    ],
+    dependencies: [
+        .package(path: "../HomePadCore"),
+        .package(path: "../HomePadAnimations"),
+    ],
+    targets: [
+        .target(
+            name: "HomePadMessagingCore",
+            dependencies: [.product(name: "HomePadCore", package: "HomePadCore")]
+        ),
         .target(
             name: "HomePadMessaging",
             dependencies: [
@@ -29,20 +25,10 @@ if !hostTests {
                 .product(name: "HomePadAnimations", package: "HomePadAnimations"),
                 .product(name: "HomePadAnimationsCore", package: "HomePadAnimations"),
             ]
-        )
-    )
-}
-
-// The animation package pulls in its remote dependency, which host tests do not need.
-var dependencies: [Package.Dependency] = [.package(path: "../HomePadCore")]
-if !hostTests {
-    dependencies.append(.package(path: "../HomePadAnimations"))
-}
-
-let package = Package(
-    name: "HomePadMessaging",
-    platforms: platforms,
-    products: products,
-    dependencies: dependencies,
-    targets: targets
+        ),
+        .testTarget(
+            name: "HomePadMessagingCoreTests",
+            dependencies: ["HomePadMessagingCore", .product(name: "HomePadCore", package: "HomePadCore")]
+        ),
+    ]
 )
