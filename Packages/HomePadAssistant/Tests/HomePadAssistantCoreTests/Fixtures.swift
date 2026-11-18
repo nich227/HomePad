@@ -17,12 +17,12 @@ enum Fixtures {
     static let timerItem = AssistantContextItem(id: "t1", kind: .timer, title: "Pasta", detail: "9 minutes left")
     static let weatherItem = AssistantContextItem(id: "w1", kind: .weather, title: "Sunny", detail: "68 degrees")
     static let ericaEvent = AssistantContextItem(id: "e1", kind: .calendarEvent, ownerID: erica, title: "Dentist", detail: "Tomorrow 9:00")
-    static let ericaMessage = AssistantContextItem(id: "m1", kind: .message, ownerID: erica, title: "Mom", detail: "Call me back")
+    static let ericaReminder = AssistantContextItem(id: "r2", kind: .reminder, ownerID: erica, title: "Water plants", detail: "Due today")
     static let dannyReminder = AssistantContextItem(id: "r1", kind: .reminder, ownerID: danny, title: "Buy milk")
     static let ownerlessEvent = AssistantContextItem(id: "e2", kind: .calendarEvent, title: "Secret party")
     static let ericaPlaylist = AssistantContextItem(id: "p1", kind: .playlist, ownerID: erica, title: "Running mix")
-    static let allItems = [timerItem, weatherItem, ericaEvent, ericaMessage, dannyReminder, ownerlessEvent, ericaPlaylist]
-    static let personalMarkers = ["Dentist", "Mom", "Call me back", "Buy milk", "Secret party", "Running mix"]
+    static let allItems = [timerItem, weatherItem, ericaEvent, ericaReminder, dannyReminder, ownerlessEvent, ericaPlaylist]
+    static let personalMarkers = ["Dentist", "Water plants", "Due today", "Buy milk", "Secret party", "Running mix"]
 
     static var utc: Calendar {
         var calendar = Calendar(identifier: .gregorian)

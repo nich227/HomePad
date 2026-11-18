@@ -108,7 +108,6 @@ public enum AssistantPrompt {
         case .nowPlaying: "Now playing"
         case .playlist: "Playlist"
         case .calendarEvent: "Calendar"
-        case .message: "Message"
         case .reminder: "Reminder"
         }
     }

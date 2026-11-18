@@ -31,7 +31,7 @@ public enum AssistantSettings {
             usePersonalContext,
             title: "Use Personal Context",
             pane: pane,
-            footer: "When on, the Assistant may use your calendar, messages, and reminders in its answers, and only while your face has unlocked personal content on this hub. Guests never get personal context."
+            footer: "When on, the Assistant may use your calendar events, your reminders, and what is playing on your iPhone in its answers, and only while your face has unlocked personal content on this hub. Guests never get personal context."
         ),
         SettingDescriptor(
             autoDismissSeconds,

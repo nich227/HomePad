@@ -71,7 +71,7 @@ All of these are decided in `HomePadAssistantCore` and unit tested.
 
 1. **Filtering comes before the prompt.** `AssistantPolicy.allowedContext` is the only way to
    make an `AssistantAllowedContext`, and `AssistantPrompt` takes nothing else. An item is
-   personal when its kind is a calendar event, message, or reminder, or when it has an owner. A
+   personal when its kind is a calendar event or reminder, or when it has an owner. A
    personal item passes only while `HouseholdSession.isPersonalContentUnlocked` is true and the
    item's owner is the active member. A guest, a profile picked by hand, and a recognized member
    waiting for their paired iPhone get shared context only. The model is never given something
@@ -132,8 +132,9 @@ person in front of it may not open, and must leave out of `screenSummary()` anyt
 that person.
 
 The app also implements `AssistantHubContext`: `hubState` (hub name, screen title, Night Mode,
-temperature unit) and `contextItems()` (timers, weather, home, now playing, and personal items
-with their owner's id).
+temperature unit) and `contextItems()`. The kinds are timer, weather, home, now playing,
+playlist, calendar event, and reminder. A personal item carries its owner's id. There is no kind
+for messages: the hub never holds anyone's messages, so the Assistant cannot be given one.
 
 ## Conversation
 

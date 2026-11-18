@@ -26,7 +26,7 @@ import Testing
     @Test func turn_whenUnlockedMember_thenOnlyTheirOwnPersonalContext() {
         let turn = turn(Fixtures.unlockedErica)
         #expect(turn.prompt.contains("- [c3] Calendar: Dentist. Tomorrow 9:00"))
-        #expect(turn.prompt.contains("- [c4] Message: Mom. Call me back"))
+        #expect(turn.prompt.contains("- [c4] Reminder: Water plants. Due today"))
         #expect(turn.prompt.contains("- [c5] Playlist: Running mix"))
         #expect(!turn.prompt.contains("Buy milk"))
         #expect(!turn.prompt.contains("Secret party"))
@@ -149,7 +149,7 @@ import Testing
         let composed = AssistantReplyComposer.exchange(request: "What is next?", reply: reply, reports: [], context: context, reportText: \.modelText)
         let exchange = try #require(composed)
         #expect(exchange.answer == "You have the dentist tomorrow.")
-        #expect(exchange.snippets == [Fixtures.ericaEvent, Fixtures.ericaMessage, Fixtures.ericaPlaylist])
+        #expect(exchange.snippets == [Fixtures.ericaEvent, Fixtures.ericaReminder, Fixtures.ericaPlaylist])
         #expect(exchange.followUps == [.suggested("When exactly?")])
         #expect(exchange.request == "What is next?")
     }

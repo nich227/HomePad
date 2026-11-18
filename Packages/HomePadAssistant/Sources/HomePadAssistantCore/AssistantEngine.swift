@@ -176,7 +176,7 @@ public final class AssistantEngine {
 
     /// Advances timeouts. Runs twice a second while the overlay is open.
     public func tick() {
-        // A session that holds one person's calendar or messages must not keep answering once
+        // A session that holds one person's calendar or reminders must not keep answering once
         // someone else, or nobody, is in front of the hub.
         if let personalContextAudience, personalContextAudience != audience() {
             send(.dismiss)

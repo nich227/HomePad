@@ -82,7 +82,7 @@ import Testing
 
     @Test func allowedContext_whenUnlocked_thenOnlyTheActiveMembersOwnItems() {
         let context = AssistantPolicy.allowedContext(Fixtures.allItems, audience: Fixtures.unlockedErica, usesPersonalContext: true)
-        #expect(context.items == [Fixtures.timerItem, Fixtures.weatherItem, Fixtures.ericaEvent, Fixtures.ericaMessage, Fixtures.ericaPlaylist])
+        #expect(context.items == [Fixtures.timerItem, Fixtures.weatherItem, Fixtures.ericaEvent, Fixtures.ericaReminder, Fixtures.ericaPlaylist])
         #expect(context.containsPersonalItems)
         #expect(context.entries.map(\.tag) == ["c1", "c2", "c3", "c4", "c5"])
 
@@ -107,7 +107,7 @@ import Testing
         #expect(!Fixtures.timerItem.isPersonal)
         #expect(Fixtures.ericaPlaylist.isPersonal)
         #expect(Fixtures.ownerlessEvent.isPersonal)
-        #expect(AssistantContextItem.Kind.allCases.filter(\.isAlwaysPersonal) == [.calendarEvent, .message, .reminder])
+        #expect(AssistantContextItem.Kind.allCases.filter(\.isAlwaysPersonal) == [.calendarEvent, .reminder])
     }
 
     @Test func itemsTagged_whenUnknownOrRepeatedTags_thenOnlyKnownItemsOnce() {
@@ -233,7 +233,7 @@ import Testing
         actions.failure = .notFound("Disco")
         #expect(await router().perform(.runScene(name: "Disco")).modelText == "Not done. Nothing named Disco was found.")
         actions.failure = .personalContentLocked
-        #expect(await router().perform(.show(name: "Messages")).result == .failure(.personalContentLocked))
+        #expect(await router().perform(.show(name: "Calendar")).result == .failure(.personalContentLocked))
         actions.failure = .unavailable
         #expect(await router().perform(.weather).result == .failure(.unavailable))
     }

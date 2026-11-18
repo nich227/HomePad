@@ -4,12 +4,12 @@ import Foundation
 public struct AssistantContextItem: Equatable, Sendable, Identifiable {
     public enum Kind: String, Sendable, CaseIterable {
         case timer, weather, home, nowPlaying, playlist
-        case calendarEvent, message, reminder
+        case calendarEvent, reminder
 
         /// Kinds that belong to one person whoever is named as the owner.
         public var isAlwaysPersonal: Bool {
             switch self {
-            case .calendarEvent, .message, .reminder: true
+            case .calendarEvent, .reminder: true
             case .timer, .weather, .home, .nowPlaying, .playlist: false
             }
         }

@@ -65,7 +65,6 @@ extension AssistantContextItem.Kind {
         case .nowPlaying: "music.note"
         case .playlist: "music.note.list"
         case .calendarEvent: "calendar"
-        case .message: "message.fill"
         case .reminder: "checklist"
         }
     }
