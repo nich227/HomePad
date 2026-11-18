@@ -1,5 +1,6 @@
 import Foundation
 import HomePadAssistant
+import HomePadAssistantCore
 import HomePadBeam
 import HomePadBeamCore
 import HomePadCore
@@ -28,6 +29,9 @@ struct HubServices {
     let environment: HubEnvironment
     let navigator: HubNavigator
     let broadcaster: HubSummaryBroadcaster
+    let assistant: AssistantEngine
+    /// Held here because the engine keeps only what it needs of it.
+    let assistantBridge: HubAssistantBridge
 }
 
 /// Everything a companion (iPhone) runs.
@@ -143,7 +147,7 @@ final class AppModel {
             let notifier = LocalNotifier()
             let sender = BeamSender(link: link, settings: settings)
             let sharePlay = SharePlayCoordinator(settings: settings)
-            let host = ProjectionHost(channel: link, settings: settings, notifier: notifier)
+            let host = ProjectionHost(channel: link, settings: settings)
             let intercom = HouseholdIntercom(channel: link, settings: settings, notifier: notifier)
             let summary = HubSummaryReceiver()
 
@@ -178,7 +182,7 @@ final class AppModel {
             let link = try BeamEnvironment.makePeerLink(role: .hub, settings: settings)
             let receiver = BeamReceiver(link: link, session: session, settings: settings)
             let sharePlay = SharePlayCoordinator(settings: settings)
-            let projection = ProjectionClient(channel: link, session: session, settings: settings)
+            let projection = ProjectionClient(channel: link, session: session)
             let intercom = HouseholdIntercom(channel: link, settings: settings, session: session)
             let embedder = await FaceEmbedderFactory.loadDefault()
             let faces = FaceRecognitionService(session: session, settings: settings, embedder: embedder)
@@ -200,6 +204,14 @@ final class AppModel {
                 recipes: live.recipes
             )
 
+            // The Assistant and Siri's hub intents act through one bridge, under one set of rules.
+            let bridge = HubAssistantBridge(
+                session: session, settings: settings, environment: environment, navigator: navigator,
+                receiver: receiver, intercom: intercom, projection: projection, link: link
+            )
+            let assistant = AssistantEngine(actions: bridge, hub: bridge, session: session, settings: settings)
+            AssistantIntentHandlers.shared.register(engine: assistant)
+
             receiver.start()
             sharePlay.attach(to: receiver)
             sharePlay.start()
@@ -210,7 +222,8 @@ final class AppModel {
             phase = .hub(HubServices(
                 link: link, receiver: receiver, sharePlay: sharePlay, projection: projection,
                 intercom: intercom, faces: faces, deviceUnlock: deviceUnlock, kiosk: kiosk, environment: environment,
-                navigator: navigator, broadcaster: HubSummaryBroadcaster(channel: link)
+                navigator: navigator, broadcaster: HubSummaryBroadcaster(channel: link),
+                assistant: assistant, assistantBridge: bridge
             ))
             configuredRole = .hub
         } catch {
@@ -221,6 +234,8 @@ final class AppModel {
     private func tearDown() async {
         switch phase {
         case .hub(let hub):
+            AssistantIntentHandlers.shared.perform = nil
+            hub.assistant.dismiss()
             hub.receiver.setSceneActive(false)
             hub.projection.stop()
             hub.intercom.stop()

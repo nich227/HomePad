@@ -3,8 +3,7 @@ import HomePadAssistant
 import HomePadMessaging
 
 /// Spoken phrases for the intents that make sense by voice: two for a companion and six that
-/// act on the hub. Relaying a message is left out on purpose: it is driven by an automation, not
-/// by a person asking. The provider has to live
+/// act on the hub. The provider has to live
 /// in the app target: declared in a package, its phrases do not reach the app's metadata.
 struct HomePadAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {

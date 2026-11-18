@@ -1,3 +1,4 @@
+import HomePadAssistant
 import HomePadBeam
 import HomePadBeamCore
 import HomePadCore
@@ -33,6 +34,9 @@ struct HubSceneView: View {
             facePosition: { [faces = hub.faces] in
                 faces.facePosition.map { FacePosition(x: $0.x, y: $0.y) }
             },
+            ambientLight: { [faces = hub.faces] in
+                Self.ambientLight(isRoomDark: faces.isRoomDark, brightness: faces.roomBrightness)
+            },
             onHubSummaryChange: { [broadcaster = hub.broadcaster] summary in
                 Task { await broadcaster.publish(summary) }
             },
@@ -40,11 +44,14 @@ struct HubSceneView: View {
             roleOverride: .hub
         )
         .overlay(alignment: .top) {
-            VStack(spacing: 12) {
-                BeamApprovalBanner(receiver: hub.receiver, proximity: model.session.proximity)
-                HouseholdNoteBanner(intercom: hub.intercom, proximity: model.session.proximity)
+            // Do Not Disturb in the control center holds the hub's banners back.
+            if !hub.navigator.isDoNotDisturbOn {
+                VStack(spacing: 12) {
+                    BeamApprovalBanner(receiver: hub.receiver, proximity: model.session.proximity)
+                    HouseholdNoteBanner(intercom: hub.intercom, proximity: model.session.proximity)
+                }
+                .padding(.top, 12)
             }
-            .padding(.top, 12)
         }
         .overlay(alignment: .bottomTrailing) {
             KioskLockOverlay(controller: hub.kiosk, showsHints: model.settings[GeneralSettings.setupMode])
@@ -84,7 +91,6 @@ struct HubSceneView: View {
     private var slots: HubFeatureSlots {
         HubFeatureSlots(
             beam: { AnyView(HubBeamView(model: model, hub: hub)) },
-            messages: { AnyView(MessagesHubView(client: hub.projection, session: model.session)) },
             projectedApps: { AnyView(HubProjectedAppsView(client: hub.projection)) },
             people: { AnyView(PeopleSetupView(session: model.session, service: hub.faces)) },
             recognitionIndicator: {
@@ -94,8 +100,44 @@ struct HubSceneView: View {
             deviceUnlock: HubDeviceUnlock(
                 isOffered: { hub.deviceUnlock.isOffered },
                 unlock: { await hub.deviceUnlock.unlock().unlocksPersonalContent }
-            )
+            ),
+            assistant: assistantSlot,
+            intercom: intercomSlot,
+            calendar: calendarSlot
         )
+    }
+
+    private var assistantSlot: HubAssistant {
+        let engine = hub.assistant
+        let navigator = hub.navigator
+        return HubAssistant(
+            isAvailable: { engine.isEnabled },
+            overlay: { dismiss in
+                AnyView(AssistantOverlayView(engine: engine, isNight: navigator.isNightMode, onDismiss: { dismiss() }))
+            }
+        )
+    }
+
+    /// Household notes, unless they are turned off in Settings.
+    private var intercomSlot: (@MainActor () -> AnyView)? {
+        guard hub.intercom.isEnabled else { return nil }
+        let intercom = hub.intercom
+        return { AnyView(HouseholdNoteComposer(intercom: intercom)) }
+    }
+
+    /// The Calendar a member's iPhone projects, when the person in front of the hub may see it.
+    private var calendarSlot: (@MainActor () -> AnyView)? {
+        guard let entry = hub.projection.entries.first(where: { $0.id.appID == BuiltInProjectedApp.calendarID }) else {
+            return nil
+        }
+        return { AnyView(ProjectionAppView(client: hub.projection, entryID: entry.id)) }
+    }
+
+    /// The camera's estimate of the room's light, in the three steps Night Mode works with.
+    static func ambientLight(isRoomDark: Bool?, brightness: Double?) -> AmbientLightHint? {
+        guard let isRoomDark else { return nil }
+        if isRoomDark { return .dark }
+        return (brightness ?? 1) < 0.5 ? .dim : .bright
     }
 }
 

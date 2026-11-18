@@ -20,7 +20,6 @@ struct CompanionSceneView: View {
             hubSummary: companion.summary.summary,
             roleOverride: .companion
         )
-        .homePadReplyComposer(host: companion.host)
         .beamPairingLinkHandler(companion.sender)
         .task {
             _ = await companion.notifier.requestAuthorization()
@@ -77,11 +76,6 @@ private struct CompanionAppsView: View {
                     }
                     ForEach(companion.host.projectedApps, id: \.id) { app in
                         Label(app.name, systemImage: app.symbolName)
-                    }
-                }
-                Section("Messages") {
-                    NavigationLink("Set Up Message Relay") {
-                        ShortcutsSetupGuideView()
                     }
                 }
                 Section("Household Note") {
