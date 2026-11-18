@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectMessages</string>
+			<key>Title</key>
+			<string>Show Messages on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectCalendar</string>
+			<key>Title</key>
+			<string>Show Calendar on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectReminders</string>
+			<key>Title</key>
+			<string>Show Reminders on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Set these on your iPhone. They choose which of this iPhone's apps appear on a nearby HomePad. Messages, Calendar, and Reminders appear only while HomePad recognizes your face.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectNowPlaying</string>
+			<key>Title</key>
+			<string>Show Now Playing on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Set this on your iPhone. When off, the conversation list on HomePad shows who wrote, and the text appears only after you open the conversation.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.showPreviews</string>
+			<key>Title</key>
+			<string>Show Message Previews</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Relayed messages are kept in memory on your iPhone for this long and are never saved on HomePad.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>24</integer>
+			<key>Key</key>
+			<string>messaging.retentionHours</string>
+			<key>Title</key>
+			<string>Keep Relayed Messages</string>
+			<key>Titles</key>
+			<array>
+				<string>1 Hour</string>
+				<string>8 Hours</string>
+				<string>1 Day</string>
+				<string>3 Days</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>1</integer>
+				<integer>8</integer>
+				<integer>24</integer>
+				<integer>72</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When off, this device neither sends nor shows household notes.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.householdNotes</string>
+			<key>Title</key>
+			<string>Household Notes</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Set this on the HomePad iPad. Enter the name of the household member whose Messages account is signed in on this iPad. Only that person can send replies from the iPad. Everyone else confirms replies on their iPhone. Leave empty to always use the iPhone.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>AutocapitalizationType</key>
+			<string>Words</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+			<key>DefaultValue</key>
+			<string></string>
+			<key>Key</key>
+			<string>messaging.hubMessagesOwner</string>
+			<key>Title</key>
+			<string>Messages on This iPad Belongs To</string>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, the HomePad app in Messages offers pages you recently sent to a HomePad.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.suggestRecentPages</string>
+			<key>Title</key>
+			<string>Suggest Recent Pages in Messages</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>MessagesProjection</string>
+	<key>Title</key>
+	<string>Messages &amp; Projection</string>
+</dict>
+</plist>

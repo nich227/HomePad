@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>HomePad locks this iPad to itself. To get to the Home Screen, tap the lock in HomePad and enter the iPad passcode. iPadOS allows an app to do this only on a supervised iPad that permits HomePad to use Single App Mode. On any other iPad, use Guided Access: turn it on in Settings &gt; Accessibility, then triple-click the top button while HomePad is open.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<false/>
+			<key>Key</key>
+			<string>kiosk.enabled</string>
+			<key>Title</key>
+			<string>Require Passcode to Leave HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>After the passcode is entered, HomePad stays unlocked for this long if nobody leaves it.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>30</integer>
+			<key>Key</key>
+			<string>kiosk.relockSeconds</string>
+			<key>Title</key>
+			<string>Lock Again After</string>
+			<key>Titles</key>
+			<array>
+				<string>15 Seconds</string>
+				<string>30 Seconds</string>
+				<string>1 Minute</string>
+				<string>5 Minutes</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>15</integer>
+				<integer>30</integer>
+				<integer>60</integer>
+				<integer>300</integer>
+			</array>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>KioskLock</string>
+	<key>Title</key>
+	<string>Kiosk Lock</string>
+</dict>
+</plist>

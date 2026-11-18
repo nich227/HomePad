@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, paired iPhones can send pages to this hub while HomePad is on screen. Nothing is received until at least one iPhone is paired.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>beam.receiveBeams</string>
+			<key>Title</key>
+			<string>Receive Beams</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>The hub always asks for the first page from a newly paired iPhone and when nobody in front of it is recognized.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>askFirst</string>
+			<key>Key</key>
+			<string>beam.approvalMode</string>
+			<key>Title</key>
+			<string>When a Page Arrives</string>
+			<key>Titles</key>
+			<array>
+				<string>Ask First</string>
+				<string>Open Immediately</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>askFirst</string>
+				<string>openImmediately</string>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Shown to paired iPhones and advertised on the local network. Do not use a name you would not want neighbors on the same network to see.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>AutocapitalizationType</key>
+			<string>Words</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+			<key>DefaultValue</key>
+			<string>HomePad</string>
+			<key>Key</key>
+			<string>beam.hubName</string>
+			<key>Title</key>
+			<string>Hub Name</string>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Shown on the hub next to pages you send.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>AutocapitalizationType</key>
+			<string>Words</string>
+			<key>AutocorrectionType</key>
+			<string>No</string>
+			<key>DefaultValue</key>
+			<string>iPhone</string>
+			<key>Key</key>
+			<string>beam.companionName</string>
+			<key>Title</key>
+			<string>This iPhone's Name</string>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>beam.sharePlay</string>
+			<key>Title</key>
+			<string>Browse Together with SharePlay</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>On an iPhone, offers the page you are about to send to hubs signed in to the same Apple Account. On a hub, accepts those pages.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>beam.handoff</string>
+			<key>Title</key>
+			<string>Handoff</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Recent pages are kept in memory only and are cleared when HomePad quits.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>beam.keepHistory</string>
+			<key>Title</key>
+			<string>Keep Recent Pages</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When off, the hub refuses pages hosted on this network, such as a router's admin page.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<false/>
+			<key>Key</key>
+			<string>beam.allowLocalAddresses</string>
+			<key>Title</key>
+			<string>Allow Local Network Addresses</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>Beam</string>
+	<key>Title</key>
+	<string>Beam</string>
+</dict>
+</plist>

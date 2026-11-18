@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>ui.home.showsWidgets</string>
+			<key>Title</key>
+			<string>Show Widgets</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>face</string>
+			<key>Key</key>
+			<string>ui.home.wallpaper</string>
+			<key>Title</key>
+			<string>Background</string>
+			<key>Titles</key>
+			<array>
+				<string>Blurred Face</string>
+				<string>Black</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>face</string>
+				<string>black</string>
+			</array>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>HomeScreen</string>
+	<key>Title</key>
+	<string>Home Screen</string>
+</dict>
+</plist>

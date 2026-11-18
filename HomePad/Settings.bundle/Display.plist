@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>Square centers the face on black. Fill adds a second column beside it.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>square</string>
+			<key>Key</key>
+			<string>ui.display.canvas</string>
+			<key>Title</key>
+			<string>Screen Layout</string>
+			<key>Titles</key>
+			<array>
+				<string>Square (like HomeView)</string>
+				<string>Fill the screen</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>square</string>
+				<string>fill</string>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Shows larger, simpler faces from across the room and more detail up close.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>ui.display.adaptiveDetail</string>
+			<key>Title</key>
+			<string>Adapt Detail to Distance</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>ui.display.keepAwake</string>
+			<key>Title</key>
+			<string>Keep Screen Awake</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>automatic</string>
+			<key>Key</key>
+			<string>ui.display.hourCycle</string>
+			<key>Title</key>
+			<string>Time Format</string>
+			<key>Titles</key>
+			<array>
+				<string>Automatic</string>
+				<string>12-Hour</string>
+				<string>24-Hour</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>automatic</string>
+				<string>12</string>
+				<string>24</string>
+			</array>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>automatic</string>
+			<key>Key</key>
+			<string>ui.display.temperatureUnit</string>
+			<key>Title</key>
+			<string>Temperature</string>
+			<key>Titles</key>
+			<array>
+				<string>Automatic</string>
+				<string>Celsius</string>
+				<string>Fahrenheit</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>automatic</string>
+				<string>celsius</string>
+				<string>fahrenheit</string>
+			</array>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>Display</string>
+	<key>Title</key>
+	<string>Display</string>
+</dict>
+</plist>

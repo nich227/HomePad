@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>While on, HomePad shows People and Pairing so you can add household members, enroll faces, and pair iPhones. Turn it off when you are done.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>general.setupMode</string>
+			<key>Title</key>
+			<string>Setup Mode</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>automatic</string>
+			<key>Key</key>
+			<string>general.deviceRole</string>
+			<key>Title</key>
+			<string>This Device Is</string>
+			<key>Titles</key>
+			<array>
+				<string>Automatic</string>
+				<string>Hub (shared screen)</string>
+				<string>Companion (personal device)</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>automatic</string>
+				<string>hub</string>
+				<string>companion</string>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, a recognized face shows personal content only while that person's paired iPhone is connected.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<false/>
+			<key>Key</key>
+			<string>general.requireCompanion</string>
+			<key>Title</key>
+			<string>Personal Content Needs Paired iPhone Nearby</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>KioskLock</string>
+			<key>Title</key>
+			<string>Kiosk Lock</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>FaceRecognition</string>
+			<key>Title</key>
+			<string>Face Recognition</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>Beam</string>
+			<key>Title</key>
+			<string>Beam</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>MessagesProjection</string>
+			<key>Title</key>
+			<string>Messages &amp; Projection</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>Faces</string>
+			<key>Title</key>
+			<string>Faces</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>Display</string>
+			<key>Title</key>
+			<string>Display</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>NightMode</string>
+			<key>Title</key>
+			<string>Night Mode</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>HomeScreen</string>
+			<key>Title</key>
+			<string>Home Screen</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+		<dict>
+			<key>File</key>
+			<string>Weather</string>
+			<key>Title</key>
+			<string>Weather</string>
+			<key>Type</key>
+			<string>PSChildPaneSpecifier</string>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>Root</string>
+</dict>
+</plist>

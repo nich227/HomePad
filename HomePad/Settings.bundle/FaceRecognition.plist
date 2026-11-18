@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, the hub uses its front camera to recognize enrolled household members. Face data stays on this device. When off, the camera is not used for recognition and everyone gets the guest experience unless a profile is picked by hand.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>face.recognitionEnabled</string>
+			<key>Title</key>
+			<string>Recognize Faces</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When the camera cannot confirm that a recognized face is a real person (no depth camera, or the person is too far away), the hub may still switch to that person's layout. Personal content stays locked either way. Turn this off to treat such a face as a guest.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>face.indeterminateLivenessPersonalizes</string>
+			<key>Title</key>
+			<string>Personalize Without Depth Check</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>How sure the hub must be before it accepts a face as a household member. Relaxed recognizes people more readily and is more likely to mistake one person for another. Strict does the opposite.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>standard</string>
+			<key>Key</key>
+			<string>face.matchStrictness</string>
+			<key>Title</key>
+			<string>Match Strictness</string>
+			<key>Titles</key>
+			<array>
+				<string>Relaxed</string>
+				<string>Standard</string>
+				<string>Strict</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>relaxed</string>
+				<string>standard</string>
+				<string>strict</string>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>How long the hub waits after it stops seeing the recognized person before it locks their profile.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>3</integer>
+			<key>Key</key>
+			<string>face.lockDelaySeconds</string>
+			<key>Title</key>
+			<string>Lock After Face Is Lost</string>
+			<key>Titles</key>
+			<array>
+				<string>1 second</string>
+				<string>3 seconds</string>
+				<string>5 seconds</string>
+				<string>10 seconds</string>
+				<string>30 seconds</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>1</integer>
+				<integer>3</integer>
+				<integer>5</integer>
+				<integer>10</integer>
+				<integer>30</integer>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>How close a person must be before the hub switches from the far layout to the near layout.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>standard</string>
+			<key>Key</key>
+			<string>face.nearDistance</string>
+			<key>Title</key>
+			<string>Show More Detail When</string>
+			<key>Titles</key>
+			<array>
+				<string>Very close</string>
+				<string>Close</string>
+				<string>Across the room</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>closer</string>
+				<string>standard</string>
+				<string>farther</string>
+			</array>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>FaceRecognition</string>
+	<key>Title</key>
+	<string>Face Recognition</string>
+</dict>
+</plist>
