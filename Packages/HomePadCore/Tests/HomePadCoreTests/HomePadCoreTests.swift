@@ -157,6 +157,109 @@ import Testing
         #expect(session.activation == .manual(profile.id))
     }
 
+    @Test func faceMatchedWithoutLiveness_whenEnrolled_thenPersonalizesButStaysLocked() throws {
+        let session = makeSession()
+        let profile = try session.addProfile(name: "A")
+        session.faceMatchedWithoutLiveness(profileID: profile.id, proximity: .near)
+        #expect(session.activation == .manual(profile.id))
+        #expect(session.cameraMatchedProfileID == profile.id)
+        #expect(session.canConfirmWithDeviceBiometrics)
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(session.isSomeonePresent)
+        #expect(session.proximity == .near)
+
+        session.faceMatchedWithoutLiveness(profileID: UUID(), proximity: .far)
+        #expect(session.cameraMatchedProfileID == profile.id)
+        #expect(session.proximity == .near)
+    }
+
+    @Test func confirmWithDeviceBiometrics_whenCameraMatchWaiting_thenUnlocksUntilPersonLeaves() throws {
+        let session = makeSession()
+        let profile = try session.addProfile(name: "A")
+        let now = Date(timeIntervalSince1970: 50)
+        session.faceMatchedWithoutLiveness(profileID: profile.id, proximity: .near)
+        #expect(session.confirmWithDeviceBiometrics(at: now))
+        #expect(session.activation == .face(profile.id, at: now))
+        #expect(session.isConfirmedByDeviceBiometrics)
+        #expect(session.isPersonalContentUnlocked)
+        #expect(!session.canConfirmWithDeviceBiometrics)
+
+        // Later frames of the same unproven match must not lock it again.
+        session.faceMatchedWithoutLiveness(profileID: profile.id, proximity: .far)
+        #expect(session.activation == .face(profile.id, at: now))
+        #expect(session.proximity == .far)
+
+        session.presenceLost()
+        #expect(session.activation == .none)
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(!session.isPersonalContentUnlocked)
+    }
+
+    @Test func confirmWithDeviceBiometrics_whenNoCameraMatch_thenRefused() throws {
+        let session = makeSession()
+        let profile = try session.addProfile(name: "A")
+        #expect(!session.confirmWithDeviceBiometrics())
+
+        try session.switchManually(to: profile.id)
+        #expect(!session.confirmWithDeviceBiometrics())
+        #expect(session.activation == .manual(profile.id))
+        #expect(!session.isPersonalContentUnlocked)
+
+        session.faceRecognized(profileID: profile.id, proximity: .near)
+        #expect(!session.confirmWithDeviceBiometrics())
+        #expect(!session.isConfirmedByDeviceBiometrics)
+    }
+
+    @Test func cameraMatch_whenAnotherMemberMatches_thenFirstMembersContentLocks() throws {
+        let session = makeSession()
+        let alice = try session.addProfile(name: "A")
+        let bob = try session.addProfile(name: "B")
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        session.confirmWithDeviceBiometrics()
+        session.faceMatchedWithoutLiveness(profileID: bob.id, proximity: .near)
+        #expect(session.activation == .manual(bob.id))
+        #expect(session.cameraMatchedProfileID == bob.id)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(!session.isPersonalContentUnlocked)
+    }
+
+    @Test func cameraMatch_whenUnknownFaceOrManualSwitchOrLock_thenCleared() throws {
+        let session = makeSession()
+        let alice = try session.addProfile(name: "A")
+        let bob = try session.addProfile(name: "B")
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        session.unknownFacePresent(proximity: .near)
+        #expect(session.activation == .none)
+        #expect(session.cameraMatchedProfileID == nil)
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        try session.switchManually(to: bob.id)
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(!session.confirmWithDeviceBiometrics())
+        session.presenceLost()
+        #expect(session.activation == .manual(bob.id))
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        session.confirmWithDeviceBiometrics()
+        session.lock()
+        #expect(session.activation == .none)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        session.confirmWithDeviceBiometrics()
+        session.faceRecognized(profileID: alice.id, proximity: .near)
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(session.isPersonalContentUnlocked)
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near)
+        try session.removeProfile(id: alice.id)
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(session.activation == .none)
+    }
+
     @Test func activationProfileID_coversEveryCase() {
         let id = UUID()
         #expect(ProfileActivation.none.profileID == nil)

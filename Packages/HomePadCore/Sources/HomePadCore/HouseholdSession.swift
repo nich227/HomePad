@@ -41,6 +41,11 @@ public final class HouseholdSession {
     public private(set) var isSomeonePresent = false
     /// Profiles whose paired companion device is connected and was unlocked recently.
     public private(set) var profilesWithCompanionPresent: Set<UUID> = []
+    /// The member the camera matched without proof that a live face was in front of it. That
+    /// match personalizes the hub. It unlocks personal content only after the device's own
+    /// biometrics confirm someone enrolled on the device is present.
+    public private(set) var cameraMatchedProfileID: UUID?
+    public private(set) var isConfirmedByDeviceBiometrics = false
 
     /// When true, personal content also needs the member's paired device nearby.
     public var requiresCompanionForPersonalContent: Bool
@@ -65,6 +70,12 @@ public final class HouseholdSession {
     }
 
     public var isGuest: Bool { activeProfile == nil }
+
+    /// True while a camera match is waiting for the device's biometrics to unlock personal content.
+    public var canConfirmWithDeviceBiometrics: Bool {
+        guard let cameraMatchedProfileID else { return false }
+        return activation == .manual(cameraMatchedProfileID)
+    }
 
     /// Personal content (messages, calendar, personal widgets) shows only for a face match.
     public var isPersonalContentUnlocked: Bool {
@@ -102,6 +113,7 @@ public final class HouseholdSession {
         profiles.removeAll { $0.id == id }
         profilesWithCompanionPresent.remove(id)
         if activation.profileID == id { activation = .none }
+        if cameraMatchedProfileID == id { clearCameraMatch() }
         try store.save(profiles)
     }
 
@@ -111,31 +123,58 @@ public final class HouseholdSession {
         guard profiles.contains(where: { $0.id == profileID }) else { return }
         isSomeonePresent = true
         self.proximity = proximity
+        clearCameraMatch()
         activation = .face(profileID, at: date)
+    }
+
+    /// The camera matched an enrolled member but could not prove the face was live, for example
+    /// on an iPad with no depth camera. Personalizes without unlocking personal content.
+    public func faceMatchedWithoutLiveness(profileID: UUID, proximity: Proximity) {
+        guard profiles.contains(where: { $0.id == profileID }) else { return }
+        isSomeonePresent = true
+        self.proximity = proximity
+        if isConfirmedByDeviceBiometrics, cameraMatchedProfileID == profileID, activation.profileID == profileID {
+            return
+        }
+        cameraMatchedProfileID = profileID
+        isConfirmedByDeviceBiometrics = false
+        activation = .manual(profileID)
+    }
+
+    /// Call after the device's biometrics (Touch ID) succeed. Unlocks personal content for the
+    /// camera-matched member until they leave. Returns false when no camera match is waiting.
+    @discardableResult
+    public func confirmWithDeviceBiometrics(at date: Date = Date()) -> Bool {
+        guard canConfirmWithDeviceBiometrics, let cameraMatchedProfileID else { return false }
+        isConfirmedByDeviceBiometrics = true
+        activation = .face(cameraMatchedProfileID, at: date)
+        return true
     }
 
     /// Someone is there but matches no enrolled profile. A face-activated profile locks.
     public func unknownFacePresent(proximity: Proximity) {
         isSomeonePresent = true
         self.proximity = proximity
-        if case .face = activation { activation = .none }
+        endCameraDrivenActivation()
     }
 
     /// Nobody is in front of the camera any more.
     public func presenceLost() {
         isSomeonePresent = false
         proximity = .far
-        if case .face = activation { activation = .none }
+        endCameraDrivenActivation()
     }
 
     public func switchManually(to profileID: UUID) throws {
         guard profiles.contains(where: { $0.id == profileID }) else {
             throw HouseholdError.unknownProfile(profileID)
         }
+        clearCameraMatch()
         activation = .manual(profileID)
     }
 
     public func lock() {
+        clearCameraMatch()
         activation = .none
     }
 
@@ -145,6 +184,21 @@ public final class HouseholdSession {
         } else {
             profilesWithCompanionPresent.remove(profileID)
         }
+    }
+
+    /// Ends what the camera started. A profile someone picked by hand stays.
+    private func endCameraDrivenActivation() {
+        if case .face = activation {
+            activation = .none
+        } else if let cameraMatchedProfileID, activation == .manual(cameraMatchedProfileID) {
+            activation = .none
+        }
+        clearCameraMatch()
+    }
+
+    private func clearCameraMatch() {
+        cameraMatchedProfileID = nil
+        isConfirmedByDeviceBiometrics = false
     }
 
     private func nextTint() -> RainbowTint {
