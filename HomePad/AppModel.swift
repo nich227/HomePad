@@ -22,6 +22,7 @@ struct HubServices {
     let projection: ProjectionClient
     let intercom: HouseholdIntercom
     let faces: FaceRecognitionService
+    let deviceUnlock: DeviceBiometricUnlock
     let kiosk: KioskLockController
     let environment: HubEnvironment
     let navigator: HubNavigator
@@ -58,13 +59,17 @@ final class AppModel {
 
     @ObservationIgnored private var configuredRole: DeviceRole?
     @ObservationIgnored private var isSceneActive = false
+    @ObservationIgnored private var isRecognitionStarted = false
 
     init() {
         let settings = HomePadSettings()
         settings.register(SettingsCatalog.descriptors)
         self.settings = settings
 
-        let store: any ProfileStore = (try? FileProfileStore.applicationSupport()) ?? InMemoryProfileStore()
+        // UI tests may ask for a sample household kept in memory. No hook is set otherwise.
+        let store: any ProfileStore = HubTestHooks.current.sampleProfileStore
+            ?? (try? FileProfileStore.applicationSupport())
+            ?? InMemoryProfileStore()
         session = HouseholdSession(
             store: store,
             requiresCompanionForPersonalContent: settings[GeneralSettings.requireCompanionForPersonalContent]
@@ -87,6 +92,14 @@ final class AppModel {
             await startHub()
         }
         applyScenePhase()
+    }
+
+    /// Starts face recognition. The hub calls this once its first-run welcome is out of the
+    /// way, so the camera prompt appears over the face and not over the welcome.
+    func startRecognition() {
+        guard case .hub(let hub) = phase, !isRecognitionStarted else { return }
+        isRecognitionStarted = true
+        Task { await hub.faces.start() }
     }
 
     func scenePhaseChanged(to scenePhase: ScenePhase) {
@@ -160,6 +173,7 @@ final class AppModel {
             let intercom = HouseholdIntercom(channel: link, settings: settings, session: session)
             let embedder = await FaceEmbedderFactory.loadDefault()
             let faces = FaceRecognitionService(session: session, settings: settings, embedder: embedder)
+            let deviceUnlock = DeviceBiometricUnlock(session: session, settings: settings, service: faces)
             let kiosk = KioskLockController(settings: settings, system: LiveKioskSystem())
             let navigator = HubNavigator()
 
@@ -183,11 +197,10 @@ final class AppModel {
             projection.start()
             intercom.start()
             kiosk.start()
-            await faces.start()
 
             phase = .hub(HubServices(
                 link: link, receiver: receiver, sharePlay: sharePlay, projection: projection,
-                intercom: intercom, faces: faces, kiosk: kiosk, environment: environment,
+                intercom: intercom, faces: faces, deviceUnlock: deviceUnlock, kiosk: kiosk, environment: environment,
                 navigator: navigator, broadcaster: HubSummaryBroadcaster(channel: link)
             ))
             configuredRole = .hub
@@ -214,6 +227,7 @@ final class AppModel {
         }
         phase = .starting
         configuredRole = nil
+        isRecognitionStarted = false
     }
 }
 

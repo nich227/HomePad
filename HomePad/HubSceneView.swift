@@ -36,6 +36,7 @@ struct HubSceneView: View {
             onHubSummaryChange: { [broadcaster = hub.broadcaster] summary in
                 Task { await broadcaster.publish(summary) }
             },
+            onWelcomeFinished: { model.startRecognition() },
             roleOverride: .hub
         )
         .overlay(alignment: .top) {
@@ -86,8 +87,14 @@ struct HubSceneView: View {
             messages: { AnyView(MessagesHubView(client: hub.projection, session: model.session)) },
             projectedApps: { AnyView(HubProjectedAppsView(client: hub.projection)) },
             people: { AnyView(PeopleSetupView(session: model.session, service: hub.faces)) },
-            recognitionIndicator: { AnyView(RecognitionIndicatorView(service: hub.faces, session: model.session)) },
-            pairing: { AnyView(PairingView(receiver: hub.receiver, session: model.session)) }
+            recognitionIndicator: {
+                AnyView(RecognitionIndicatorView(service: hub.faces, session: model.session, unlock: hub.deviceUnlock))
+            },
+            pairing: { AnyView(PairingView(receiver: hub.receiver, session: model.session)) },
+            deviceUnlock: HubDeviceUnlock(
+                isOffered: { hub.deviceUnlock.isOffered },
+                unlock: { await hub.deviceUnlock.unlock().unlocksPersonalContent }
+            )
         )
     }
 }
