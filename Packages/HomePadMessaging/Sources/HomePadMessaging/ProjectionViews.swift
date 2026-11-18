@@ -22,7 +22,7 @@ struct ProjectionType {
             detail = .title2
             rowSpacing = 22
             symbolSize = 44
-        case .near:
+        case .mid, .near:
             title = .title2.weight(.bold)
             body = .body
             detail = .subheadline

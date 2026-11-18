@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "HomePadCore",
-    platforms: [.iOS(.v26)],
+    platforms: [.iOS("27.0")],
     products: [
         .library(name: "HomePadCore", targets: ["HomePadCore"]),
     ],

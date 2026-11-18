@@ -1,9 +1,10 @@
 import Foundation
 import Observation
 
-/// How far the person in front of the hub is. Faces show less detail when far.
-public enum Proximity: String, Codable, Sendable {
-    case far, near
+/// How far the person in front of the hub is. Far is across the room: large numbers only. Mid
+/// is on approach: labels and thumbnails appear. Near is within reach: full controls.
+public enum Proximity: String, Codable, Sendable, CaseIterable {
+    case far, mid, near
 }
 
 /// How the active profile was selected. Personal content needs `face`.
