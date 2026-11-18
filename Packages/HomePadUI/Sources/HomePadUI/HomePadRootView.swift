@@ -52,13 +52,32 @@ public struct HomePadRootView: View {
 
     /// The role this device plays right now.
     public static func role(settings: HomePadSettings, override: DeviceRole? = nil) -> DeviceRole {
-        override ?? GeneralSettings.resolvedRole(
+        // A UI test may force the role for one launch. No hook is set otherwise.
+        override ?? HubTestHooks.current.role ?? GeneralSettings.resolvedRole(
             setting: settings[GeneralSettings.deviceRole],
             isPad: UIDevice.current.userInterfaceIdiom == .pad
         )
     }
 
     public var body: some View {
+        if let viewport = HubTestHooks.current.viewport {
+            // Only for UI tests: the whole app at the size of a display this machine cannot
+            // simulate, with the size classes that display reports.
+            ZStack {
+                Color.black.ignoresSafeArea()
+                content
+                    .frame(width: viewport.width, height: viewport.height)
+                    .clipped()
+                    .environment(\.horizontalSizeClass, viewport.isRegularWidth ? .regular : .compact)
+                    .environment(\.verticalSizeClass, viewport.isRegularHeight ? .regular : .compact)
+            }
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch Self.role(settings: settings, override: roleOverride) {
         case .hub:
             HubRootView(

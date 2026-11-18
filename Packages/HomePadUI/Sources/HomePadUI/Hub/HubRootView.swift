@@ -86,50 +86,11 @@ public struct HubRootView: View {
         let density = FaceDensity(proximity: session.proximity, adaptiveDetail: preferences.adaptiveDetail)
         let showsDeviceUnlock = VisibilityPolicy.showsDeviceUnlock(context: audience, isDeviceUnlockOffered: isDeviceUnlockOffered)
         GeometryReader { proxy in
-            let layout = CanvasLayout(
-                width: proxy.size.width,
-                height: proxy.size.height,
-                mode: preferences.canvas,
-                gap: min(proxy.size.width, proxy.size.height) * 0.02
-            )
-            let metrics = HubMetrics(side: layout.square.width, textScale: dynamicTypeSize.hubTextScale)
-            ZStack(alignment: .topLeading) {
-                Color.black
-                canvas(preferences: preferences, audience: audience, metrics: metrics, hasBezelStatus: layout.status != nil)
-                    .frame(width: layout.square.width, height: layout.square.height)
-                    .clipShape(RoundedRectangle(cornerRadius: layout.square.width * CGFloat(CanvasLayout.cornerRadiusFraction), style: .continuous))
-                    .offset(x: layout.square.x, y: layout.square.y)
-                if let side = layout.side, model.night == .day, !needsWelcome {
-                    SideColumn(isWide: side.width > side.height)
-                        .frame(width: side.width, height: side.height)
-                        .offset(x: side.x, y: side.y)
-                        .transition(.opacity)
-                }
-                if let status = layout.status, model.night == .day, !needsWelcome {
-                    BezelStatusView(
-                        profile: session.activeProfile,
-                        isSomeonePresent: session.isSomeonePresent,
-                        isOnFaces: navigator.state.surface == .faces,
-                        showsAvatar: navigator.state.surface != .homeScreen,
-                        indicator: slots.recognitionIndicator,
-                        onProfile: { model.showsSwitcher = true },
-                        onToggleSurface: {
-                            model.touch()
-                            navigator.state.surface == .faces ? navigator.showHomeScreen() : navigator.showFaces()
-                        },
-                        onUnlock: { runDeviceUnlock(thenOpen: nil) }
-                    )
-                    .frame(width: status.width, height: status.height)
-                    .offset(x: status.x, y: status.y)
-                    .transition(.opacity)
-                }
-                if navigator.state.isTakeoverPresented {
-                    BeamTakeoverView(content: slots.beam) { navigator.dismissBeam() }
-                        .transition(.opacity.combined(with: .scale(scale: 1.04)))
-                        .zIndex(10)
-                }
+            HubPanes(simulatesFold: hooks.foldsHub) {
+                chromePane(container: proxy.size, preferences: preferences, isHidden: needsWelcome || model.night != .day)
+            } canvas: {
+                canvasPane(container: proxy.size, preferences: preferences, audience: audience)
             }
-            .environment(\.hubMetrics, metrics)
         }
         .ignoresSafeArea()
         .background(Color.black.ignoresSafeArea())
@@ -205,6 +166,120 @@ public struct HubRootView: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
+    }
+
+    // MARK: Panes
+
+    private func placement(of pane: CGSize, in container: CGSize) -> HubPanePlacement {
+        HubPanePolicy.placement(
+            containerWidth: Double(container.width),
+            containerHeight: Double(container.height),
+            paneWidth: Double(pane.width),
+            paneHeight: Double(pane.height)
+        )
+    }
+
+    private func canvasLayout(in size: CGSize, mode: CanvasMode) -> CanvasLayout {
+        CanvasLayout(width: size.width, height: size.height, mode: mode, gap: min(size.width, size.height) * 0.02)
+    }
+
+    /// The square canvas. With the display flat it sits where `CanvasLayout` puts it, with room
+    /// around it for the other pane. On one side of a fold it is the largest square that fits.
+    private func canvasPane(container: CGSize, preferences: HubPreferences, audience: AudienceContext) -> some View {
+        GeometryReader { pane in
+            let isApart = placement(of: pane.size, in: container) == .apart
+            let layout = canvasLayout(in: pane.size, mode: isApart ? .square : preferences.canvas)
+            let metrics = HubMetrics(side: layout.square.width, textScale: dynamicTypeSize.hubTextScale)
+            ZStack(alignment: .topLeading) {
+                Color.black
+                canvas(preferences: preferences, audience: audience, metrics: metrics, hasBezelStatus: isApart || layout.status != nil)
+                    .frame(width: layout.square.width, height: layout.square.height)
+                    .clipShape(RoundedRectangle(cornerRadius: layout.square.width * CGFloat(CanvasLayout.cornerRadiusFraction), style: .continuous))
+                    .offset(x: layout.square.x, y: layout.square.y)
+                if navigator.state.isTakeoverPresented {
+                    BeamTakeoverView(content: slots.beam) { navigator.dismissBeam() }
+                        .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                        .zIndex(10)
+                }
+            }
+            .environment(\.hubMetrics, metrics)
+            .environment(\.hubChromeIsApart, isApart)
+        }
+    }
+
+    /// Everything around the canvas: who is in front, the way between the face and the Home
+    /// Screen, and the widgets. With the display flat it is drawn in the space `CanvasLayout`
+    /// leaves around the canvas and is clear everywhere else. On one side of a fold it fills its
+    /// side: the status across the top, then running timers, then the widgets.
+    @ViewBuilder
+    private func chromePane(container: CGSize, preferences: HubPreferences, isHidden: Bool) -> some View {
+        GeometryReader { pane in
+            if isHidden {
+                EmptyView()
+            } else if placement(of: pane.size, in: container) == .apart {
+                let panel = ChromePanelLayout(width: Double(pane.size.width), height: Double(pane.size.height))
+                VStack(spacing: 0) {
+                    status(clearance: clearance(for: panel.status, in: pane))
+                        .frame(height: panel.status.height)
+                    TimerStripView(strip: environment.timers.strip) { open(.timers, audience: nil) }
+                    SideColumn(showsTimers: false)
+                }
+                .environment(\.hubMetrics, HubMetrics(side: panel.unitSide, textScale: dynamicTypeSize.hubTextScale))
+                .transition(.opacity)
+            } else if !navigator.state.isTakeoverPresented {
+                let layout = canvasLayout(in: pane.size, mode: preferences.canvas)
+                ZStack(alignment: .topLeading) {
+                    if let side = layout.side {
+                        SideColumn()
+                            .frame(width: side.width, height: side.height)
+                            .offset(x: side.x, y: side.y)
+                    }
+                    if let frame = layout.status {
+                        status(clearance: clearance(for: frame, in: pane))
+                            .frame(width: frame.width, height: frame.height)
+                            .offset(x: frame.x, y: frame.y)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .environment(\.hubMetrics, HubMetrics(side: layout.square.width, textScale: dynamicTypeSize.hubTextScale))
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func status(clearance: EdgeInsets) -> some View {
+        BezelStatusView(
+            profile: session.activeProfile,
+            isSomeonePresent: session.isSomeonePresent,
+            isOnFaces: navigator.state.surface == .faces,
+            showsAvatar: navigator.state.surface != .homeScreen,
+            indicator: slots.recognitionIndicator,
+            onProfile: { model.showsSwitcher = true },
+            onToggleSurface: {
+                model.touch()
+                navigator.state.surface == .faces ? navigator.showHomeScreen() : navigator.showFaces()
+            },
+            onUnlock: { runDeviceUnlock(thenOpen: nil) },
+            clearance: clearance
+        )
+    }
+
+    /// How far the status must stay in from the edges of its frame to keep clear of the safe
+    /// area and of anything that covers the display, such as a camera.
+    private func clearance(for frame: CanvasFrame, in pane: GeometryProxy) -> EdgeInsets {
+        let safe = pane.safeAreaInsets
+        var obstacles = CanvasFrame.edges(
+            of: CanvasInsets(top: safe.top, leading: safe.leading, bottom: safe.bottom, trailing: safe.trailing),
+            width: Double(pane.size.width),
+            height: Double(pane.size.height)
+        )
+        if #available(iOS 27.1, *) {
+            obstacles += pane.reservedRegions(kind: .occlusion).map {
+                CanvasFrame(x: $0.frame.minX, y: $0.frame.minY, width: $0.frame.width, height: $0.frame.height)
+            }
+        }
+        let insets = frame.insets(clearing: obstacles)
+        return EdgeInsets(top: insets.top, leading: insets.leading, bottom: insets.bottom, trailing: insets.trailing)
     }
 
     // MARK: Canvas
@@ -288,26 +363,7 @@ public struct HubRootView: View {
     /// What floats over a face: the timer strip, and, only when there is no room beside the
     /// canvas for it, a Home Screen button for people using a pointer or assistive technology.
     private func faceChrome(metrics: HubMetrics, showsHomeButton: Bool) -> some View {
-        VStack(spacing: 0) {
-            Spacer()
-            TimerStripView(strip: environment.timers.strip) { open(.timers, audience: nil) }
-            if showsHomeButton {
-                Button {
-                    navigator.showHomeScreen()
-                } label: {
-                    Image(systemName: "chevron.compact.up")
-                        .font(.system(size: metrics.pt(5), weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .frame(width: metrics.pt(16), height: metrics.pt(5))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityLabel("Show Home Screen")
-                .accessibilityIdentifier("hub.showHomeScreen")
-            }
-        }
-        .padding(metrics.pt(3.5))
+        FaceChrome(showsHomeButton: showsHomeButton, onTimers: { open(.timers, audience: nil) }, onHome: { navigator.showHomeScreen() })
     }
 
     @ViewBuilder
@@ -428,6 +484,77 @@ public struct HubRootView: View {
         )
         if let changed = model.summaryIfChanged(summary) {
             onSummaryChange(changed)
+        }
+    }
+}
+
+/// What floats over a face: the timer strip, and, only when there is no room beside the canvas
+/// for it, a Home Screen button for people using a pointer or assistive technology. When a fold
+/// gives the status its own side, the timers are shown there and not on the face.
+private struct FaceChrome: View {
+    let showsHomeButton: Bool
+    let onTimers: () -> Void
+    let onHome: () -> Void
+    @Environment(\.hubMetrics) private var metrics
+    @Environment(\.hubChromeIsApart) private var chromeIsApart
+    @Environment(HubEnvironment.self) private var environment
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            if !chromeIsApart {
+                TimerStripView(strip: environment.timers.strip, action: onTimers)
+            }
+            if showsHomeButton {
+                Button(action: onHome) {
+                    Image(systemName: "chevron.compact.up")
+                        .font(.system(size: metrics.pt(5), weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .frame(width: metrics.pt(16), height: metrics.pt(5))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Show Home Screen")
+                .accessibilityIdentifier("hub.showHomeScreen")
+            }
+        }
+        .padding(metrics.pt(3.5))
+    }
+}
+
+/// Holds the hub's two panes. With the display flat the chrome lies over the canvas, each
+/// drawing in its own part of the screen. When the display is partly folded the system gives
+/// each pane one side of the fold, so nothing sits in it.
+private struct HubPanes<Chrome: View, Canvas: View>: View {
+    let simulatesFold: Bool
+    @ViewBuilder let chrome: Chrome
+    @ViewBuilder let canvas: Canvas
+
+    var body: some View {
+        if simulatesFold {
+            // Only for UI tests: halves with a gap between them, in the order the system uses
+            // for a folded overlay arrangement.
+            GeometryReader { proxy in
+                let isWide = proxy.size.width > proxy.size.height
+                let layout = isWide ? AnyLayout(HStackLayout(spacing: 24)) : AnyLayout(VStackLayout(spacing: 24))
+                layout {
+                    canvas
+                    chrome
+                }
+            }
+        } else if #available(iOS 27.1, *) {
+            ArrangementView {
+                chrome
+            } secondary: {
+                canvas
+            }
+            .arrangementViewStyle(.overlay)
+        } else {
+            ZStack {
+                canvas
+                chrome
+            }
         }
     }
 }

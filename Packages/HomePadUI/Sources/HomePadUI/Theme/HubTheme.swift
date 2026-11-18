@@ -20,6 +20,9 @@ struct HubMetrics: Equatable, Sendable {
 
     /// Corner radius shared by tiles and widgets.
     var tileRadius: CGFloat { pt(6) }
+
+    /// The least side of a control, in points, however small the canvas is.
+    static let minimumTouchSide: CGFloat = 44
 }
 
 /// Units after "automatic" has been resolved against the device's region.
@@ -53,6 +56,9 @@ extension EnvironmentValues {
     @Entry var hubMayRunScenes = false
     /// True while a personalized but locked member can unlock with the device's biometrics.
     @Entry var hubShowsDeviceUnlock = false
+    /// True while a fold gives the status, timers, and widgets a side of their own, away from
+    /// the canvas.
+    @Entry var hubChromeIsApart = false
 }
 
 /// Starts a service the first time its view is really in use. Starting is what makes the system
@@ -147,11 +153,13 @@ struct GlassCircleButton: View {
     @Environment(\.hubMetrics) private var metrics
 
     var body: some View {
+        // On a small canvas a round button keeps the least size a finger can press reliably.
+        let side = max(metrics.pt(size), HubMetrics.minimumTouchSide)
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: metrics.pt(size * 0.42), weight: .semibold))
+                .font(.system(size: side * 0.42, weight: .semibold))
                 .foregroundStyle(.primary)
-                .frame(width: metrics.pt(size), height: metrics.pt(size))
+                .frame(width: side, height: side)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

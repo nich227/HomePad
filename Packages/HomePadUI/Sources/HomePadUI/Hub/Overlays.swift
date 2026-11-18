@@ -17,28 +17,40 @@ struct BezelStatusView: View {
     let onProfile: () -> Void
     let onToggleSurface: () -> Void
     let onUnlock: () -> Void
+    /// How far to stay in from each edge, to keep clear of a camera or the edge of the display.
+    var clearance = EdgeInsets()
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubShowsDeviceUnlock) private var showsDeviceUnlock
 
+    /// A button's side: nine units of the canvas, and never too small to press.
+    private var buttonSide: CGFloat {
+        max(metrics.pt(9), HubMetrics.minimumTouchSide)
+    }
+
     var body: some View {
         GeometryReader { proxy in
-            if proxy.size.height > proxy.size.width * 1.4 {
-                VStack(spacing: metrics.pt(1.6)) {
-                    if showsAvatar {
-                        avatar(size: metrics.pt(9), name: .below)
+            let width = proxy.size.width - clearance.leading - clearance.trailing
+            let height = proxy.size.height - clearance.top - clearance.bottom
+            Group {
+                if height > width * 1.4 {
+                    VStack(spacing: metrics.pt(1.6)) {
+                        if showsAvatar {
+                            avatar(size: buttonSide, name: .below)
+                        }
+                        FittedToWidth(width: max(0, width - metrics.pt(2))) { indicator() }
+                        if showsDeviceUnlock {
+                            unlockButton(size: max(metrics.pt(11), HubMetrics.minimumTouchSide), showsCaption: true)
+                        }
+                        Spacer(minLength: 0)
+                        surfaceButton(size: buttonSide)
                     }
-                    FittedToWidth(width: max(0, proxy.size.width - metrics.pt(2))) { indicator() }
-                    if showsDeviceUnlock {
-                        unlockButton(size: metrics.pt(11), showsCaption: true)
-                    }
-                    Spacer(minLength: 0)
-                    surfaceButton(size: metrics.pt(9))
+                    .padding(.vertical, metrics.pt(3.2))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    row(width: width, height: height)
                 }
-                .padding(.vertical, metrics.pt(3.2))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                row(width: proxy.size.width, height: proxy.size.height)
             }
+            .padding(clearance)
         }
     }
 
@@ -51,7 +63,7 @@ struct BezelStatusView: View {
         let buttons: CGFloat = showsDeviceUnlock ? 3 : 2
         let indicatorMinimum = metrics.pt(5)
         let nameWidth = metrics.pt(18)
-        let size = max(0, min(metrics.pt(9), height - metrics.pt(2), (available - spacing * buttons - indicatorMinimum) / buttons))
+        let size = max(0, min(buttonSide, height - metrics.pt(2), (available - spacing * buttons - indicatorMinimum) / buttons))
         let free = available - (size + spacing) * buttons
         let showsName = free - indicatorMinimum >= nameWidth
         let indicatorLimit = min(width * 0.4, free - (showsName ? nameWidth : 0))
@@ -133,13 +145,18 @@ struct BezelStatusView: View {
     }
 
     private func surfaceButton(size: CGFloat) -> some View {
-        GlassCircleButton(
-            symbol: isOnFaces ? "square.grid.2x2.fill" : "clock.fill",
-            label: isOnFaces ? "Show Home Screen" : "Show Face",
-            size: size / max(metrics.pt(1), 0.001),
-            identifier: isOnFaces ? "hub.showHomeScreen" : "hub.showFace",
-            action: onToggleSurface
-        )
+        Button(action: onToggleSurface) {
+            Image(systemName: isOnFaces ? "square.grid.2x2.fill" : "clock.fill")
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .hubGlass(in: Circle(), interactive: true)
+        .hoverEffect(.highlight)
+        .accessibilityLabel(isOnFaces ? "Show Home Screen" : "Show Face")
+        .accessibilityIdentifier(isOnFaces ? "hub.showHomeScreen" : "hub.showFace")
     }
 }
 
@@ -493,51 +510,57 @@ struct BeamTakeoverView: View {
     }
 }
 
-/// The second column of the fill layout: the Home Screen's widgets beside the square canvas,
-/// drawn at their usual proportions and scaled to the column.
+/// The Home Screen's widgets in the space beside the canvas: the second column of the fill
+/// layout, or one side of a fold. They are drawn at their usual proportions and scaled to the
+/// grid that fits the space best.
 struct SideColumn: View {
-    let isWide: Bool
+    /// False where a timer strip is shown right above, so timers are not listed twice.
+    var showsTimers = true
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubAudience) private var audience
     @Environment(HubEnvironment.self) private var environment
 
     /// The side of a widget on the Home Screen, in canvas units. Widgets are laid out for it.
     private static let designSide: CGFloat = 39.4
-    private static let count = 3
 
     private var kinds: [HubWidgetKind] {
         var kinds: [HubWidgetKind] = [.nowPlaying, .weather, .home, .clock]
-        if !environment.timers.strip.entries.isEmpty {
+        if showsTimers, !environment.timers.strip.entries.isEmpty {
             kinds.insert(.timers, at: 0)
         }
-        return Array(kinds.filter { VisibilityPolicy.visibility(of: $0, context: audience) == .visible }.prefix(Self.count))
+        return kinds.filter { VisibilityPolicy.visibility(of: $0, context: audience) == .visible }
     }
 
     var body: some View {
         GeometryReader { proxy in
             let gap = metrics.pt(2.4)
             let inset = metrics.pt(1.6)
-            let width = proxy.size.width - inset * 2
-            let height = proxy.size.height - inset * 2
-            let count = CGFloat(Self.count)
-            let tile = isWide
-                ? CGSize(width: (width - gap * (count - 1)) / count, height: height)
-                : CGSize(width: width, height: (height - gap * (count - 1)) / count)
-            let design = metrics.pt(Self.designSide)
+            let design = max(metrics.pt(Self.designSide), 1)
+            let grid = SidePanelGrid(
+                width: Double(proxy.size.width - inset * 2),
+                height: Double(proxy.size.height - inset * 2),
+                gap: Double(gap),
+                preferredSide: Double(design)
+            )
+            let tile = CGSize(width: grid.tileWidth, height: grid.tileHeight)
             let scale = min(tile.width, tile.height) / design
-            let layout = isWide ? AnyLayout(HStackLayout(spacing: gap)) : AnyLayout(VStackLayout(spacing: gap))
-            layout {
-                ForEach(kinds) { kind in
-                    WidgetContent(kind: kind)
-                        .padding(metrics.pt(3.4))
-                        .frame(width: design, height: design, alignment: .topLeading)
-                        .scaleEffect(scale)
-                        .frame(width: tile.width, height: tile.height)
-                        .hubTile(metrics, tint: Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
+            let shown = Array(kinds.prefix(grid.count))
+            VStack(alignment: .leading, spacing: gap) {
+                ForEach(0..<grid.rows, id: \.self) { row in
+                    HStack(spacing: gap) {
+                        ForEach(shown.dropFirst(row * grid.columns).prefix(grid.columns)) { kind in
+                            WidgetContent(kind: kind)
+                                .padding(metrics.pt(3.4))
+                                .frame(width: design, height: design, alignment: .topLeading)
+                                .scaleEffect(scale)
+                                .frame(width: tile.width, height: tile.height)
+                                .hubTile(metrics, tint: Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
+                        }
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isWide ? .leading : .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(inset)
         }
         .clipped()

@@ -144,6 +144,13 @@ public struct HubTestHooks: Equatable, Sendable {
     /// Behave as if the camera matched a member without a liveness proof and the device's own
     /// biometrics are offered, on hardware that has none.
     public let offersDeviceUnlock: Bool
+    /// Frame the whole app to this size, to capture the layout of a display that cannot be
+    /// simulated here.
+    public let viewport: TestViewport?
+    /// Play this role whatever the device and Settings say.
+    public let role: DeviceRole?
+    /// Lay the hub out as if a fold divides the display in two.
+    public let foldsHub: Bool
 
     public static let none = HubTestHooks(environment: [:])
 
@@ -159,5 +166,8 @@ public struct HubTestHooks: Equatable, Sendable {
         forcesNight = flag("NIGHT")
         skipsWelcome = flag("SKIP_WELCOME")
         offersDeviceUnlock = flag("DEVICE_UNLOCK")
+        viewport = environment["HOMEPAD_UITEST_VIEWPORT"].flatMap(TestViewport.init)
+        role = environment["HOMEPAD_UITEST_ROLE"].flatMap(DeviceRole.init(rawValue:))
+        foldsHub = flag("FOLD")
     }
 }

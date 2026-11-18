@@ -1,11 +1,12 @@
 # HomePadUI: the hub shell and the companion shell
 
-`Packages/HomePadUI` draws the HomeView-style experience on the iPad hub and a small tab layout
-on the iPhone companion. It has two targets:
+`Packages/HomePadUI` draws the HomeView-style experience on the iPad hub and the companion on
+the iPhone. Both adapt to the space they get, including the two displays of a folding iPhone
+(see "Sizes and folding displays"). It has two targets:
 
 | Target | What it holds |
 |---|---|
-| `HomePadUICore` | Pure logic, unit-tested on the iOS simulator: clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, night mode, the recipe parser, Flow face math, the canvas layout, and `UISettings`. |
+| `HomePadUICore` | Pure logic, unit-tested on the iOS simulator: clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, night mode, the recipe parser, Flow face math, the canvas layout, the rules for sizes and folds, and `UISettings`. |
 | `HomePadUI` | SwiftUI views and the services behind them (HomeKit, Music, camera, WeatherKit, Photos). |
 
 ## How the app target uses it
@@ -58,16 +59,18 @@ HomePadRootView(
 
 | Slot | Where it appears on the hub | On the companion |
 |---|---|---|
-| `beam` | Beam app on the Home Screen, and the full-screen takeover | Beam tab |
+| `beam` | Beam app on the Home Screen, and the full-screen takeover | Beam section |
 | `messages` | Messages app. Personal: hidden for guests, greyed out until a face unlocks it | not shown |
-| `projectedApps` | iPhone Apps app. Personal, same rule as Messages | Apps tab |
-| `people` | People app, only while Setup Mode is on | People tab, only while Setup Mode is on |
-| `pairing` | Pairing app, only while Setup Mode is on | People tab, only while Setup Mode is on |
-| `recognitionIndicator` | In the black beside the canvas, under the profile avatar. In the Home Screen header only when the canvas has no margin | Hub tab toolbar |
+| `projectedApps` | iPhone Apps app. Personal, same rule as Messages | Apps section |
+| `people` | People app, only while Setup Mode is on | People section, only while Setup Mode is on |
+| `pairing` | Pairing app, only while Setup Mode is on | People section, only while Setup Mode is on |
+| `recognitionIndicator` | In the black beside the canvas, under the profile avatar. In the Home Screen header only when the canvas has no margin | not shown |
 
-On the companion, the `beam`, `people`, and `pairing` slots are placed inside a
-`NavigationStack`, so a slot view sets a title and does not bring its own stack. The
-`projectedApps` slot fills its tab and brings its own.
+On the companion a section is a tab in a compact width and the trailing column in a regular
+width. The `beam`, `people`, and `pairing` slots are placed inside a `NavigationStack`, so a slot
+view sets a title and does not bring its own stack. The `projectedApps` slot fills its section
+and brings its own. The companion puts no custom view in a toolbar, because the system cannot
+move a custom view into the bars it draws down the side of a folding iPhone.
 
 Slot apps are drawn by `SlotScreen` inside the square canvas: a title and a round close button
 above, a black background, and the dark color scheme. The slot's text is stepped up through
@@ -136,8 +139,9 @@ side, so faces keep their proportions at any size.
 
 - **Square (like HomeView)**, the default: the canvas is centered and the rest stays black.
 - **Fill the screen**: the canvas moves to the leading edge (or the top, in portrait) and a second
-  column shows three Home Screen widgets (timers when one is running, now playing, weather,
-  home, clock), drawn at their Home Screen proportions and scaled to the column.
+  column shows up to four Home Screen widgets (timers when one is running, now playing, weather,
+  home, clock), drawn at their Home Screen proportions and scaled. `SidePanelGrid` picks how
+  many and in what grid: three in one column beside a large iPad's canvas.
 
 ### Status beside the canvas
 
@@ -157,6 +161,83 @@ When the app's space is square and there is no margin (`status` is nil), the ava
 Home Screen header only, and small chevrons at the bottom of the canvas move between the face
 and the Home Screen.
 
+## Sizes and folding displays
+
+Nothing here checks for a device model. Layout follows the size class, the size of the
+container, and what the system reports about the display. That covers an iPhone, an iPad in any
+window size, and iPhone Duo, which has a compact-width outer display (about 466 by 678 points)
+and a regular-width inner display (about 626 by 890 points) that folds across its middle. The
+rules are in `HomePadUICore/AdaptiveLayout.swift`.
+
+### Companion
+
+`CompanionLayoutPolicy.arrangement(isRegularWidth:width:)` picks one of two arrangements. One
+selection (`CompanionSection`) serves both, so opening and closing the device keeps the place.
+
+| Width | Arrangement | Container |
+|---|---|---|
+| Compact: an iPhone, the outer display of iPhone Duo in either orientation | Four tabs: Hub, Beam, Apps, People | `TabView` |
+| Regular and at least 560 points: the inner display in either orientation, an iPad | Two columns. Leading: what the hub is showing, then the list of sections. Trailing: the chosen section | `NavigationSplitView`, balanced |
+
+- The hub's status is always visible in the leading column, so Hub is not in its list. With
+  the Hub tab selected, the trailing column shows Beam, and the selection is kept for the way
+  back to tabs.
+- The columns ask for widths in proportion to the container
+  (`CompanionLayoutPolicy.sidebarWidth(forWidth:)`, `minimumDetailWidth`). These are
+  preferences. Without them the split view on the iPad mini stand-in laid the leading column
+  over the content at 626 points; with them it shows both side by side.
+- The system places the bars. On iPhone Duo's outer display it draws tab bars and toolbars
+  down the side, and the companion does not opt out anywhere (`toolbarVerticalBehavior` is not
+  used). The package presents no sheets, so `presentationPlacement` is not used either.
+- When the inner display is partly folded, the split view gives each column one side of the
+  fold. That is the system's behavior for `NavigationSplitView`; the companion adds nothing.
+  Apple's guidance is to keep an `ArrangementView` out of a split view, so none is used here.
+- A section's own state, such as a link typed into Beam, starts again when the arrangement
+  changes between tabs and columns, because each arrangement builds its own copy of the section.
+
+### Hub
+
+The hub is two panes: the canvas, and the chrome around it (who is in front, the way between
+the face and the Home Screen, running timers, and the widgets of the second column).
+
+| iOS | Container | Display flat | Display partly folded |
+|---|---|---|---|
+| 27.1 and later | `ArrangementView` with the `.overlay` style. The chrome is the primary view and the canvas the secondary | The chrome lies over the canvas. Each draws only in its own part of the screen, placed by `CanvasLayout`, as before | The system gives each pane one side of the fold: the canvas leading or on top, the chrome trailing or below |
+| 26.0 to 27.0 | `ZStack` | The same | Not applicable: no folding device runs these versions |
+
+Each pane measures itself against the whole container (`HubPanePolicy.placement`). A pane with
+less than three quarters of the area has been given a side of its own. Then:
+
+- The canvas pane draws the largest square that fits its side.
+- The chrome pane fills its side (`ChromePanelLayout`): the status across the top, the timer
+  strip under it, then the widgets in the grid that suits the space (`SidePanelGrid`), two by
+  two on half of the inner display. The timer strip leaves the face while it is shown here.
+
+With the display flat the canvas scales as on any screen. The status sits in the strip above
+the canvas in portrait and in the column beside it in landscape, at the inner and the outer
+sizes alike, and falls back to the in-canvas controls when the space is exactly square.
+
+- Round buttons never get smaller than 44 points (`HubMetrics.minimumTouchSide`), however
+  small the canvas.
+- The status keeps clear of the safe area and of anything that covers the display. On iOS
+  27.1 and later it asks the `GeometryProxy` for `reservedRegions(kind: .occlusion)`, which is
+  where the outer display's camera is reported, and moves in from the nearest edge
+  (`CanvasFrame.insets(clearing:)`). The canvas itself still runs to the edges of the display.
+- The second column picks its grid from the space: one column of three beside a large iPad's
+  canvas, as before, and other grids in smaller spaces.
+
+### What is and is not verified
+
+No iPhone Duo simulator runs on this machine. The UI tests frame the whole app to the Duo's
+sizes on the iPad mini simulator (`HOMEPAD_UITEST_VIEWPORT`) and, for the hub, place the two
+panes in halves the way the documentation describes a folded overlay arrangement
+(`HOMEPAD_UITEST_FOLD`). So the layouts at those sizes and the contents of each pane are seen.
+`ArrangementView` itself runs on the iOS 27.2 simulators with the display flat, and the whole
+hub walkthrough passes through it. These are not seen and come from Apple's documentation:
+the system's bars down the side of the outer display, the real position and behavior of the
+fold, `ArrangementView` and `NavigationSplitView` in a folded pose, the occlusion that
+`reservedRegions` reports for the cameras, and the size classes a real Duo reports.
+
 ## Faces
 
 Swipe left or right to change faces, or use the arrow keys. Swipe up, press the up arrow, or tap
@@ -171,7 +252,7 @@ off, which keeps the detailed layout.
 | Photos | Photo with four very tall translucent digits | Adds the date | `product-faces-endframe.jpg`, `newsroom-collection-of-faces.jpg` |
 | Weather | Condition, time, very large temperature | Adds high and low and a row of four details | `newsroom-collection-of-faces.jpg` |
 | Home Modular | Thermostat, clock, four tiles without subtitles | Adds room names | `product-dashboard.jpg`, `newsroom-lifestyle-living-room.jpg` |
-| Calendar | Month, time, very large day number, weekday | The month grid with today circled | `newsroom-collection-of-faces.jpg` |
+| Calendar | Month, time, very large day number, weekday | The month grid alone, with today circled | `newsroom-collection-of-faces.jpg` |
 | Flow | Liquid digits on a pink and blue field | Adds the date | `newsroom-collection-of-faces.jpg` |
 | Analog | Numerals and hands | Adds the second hand and "WED 1" | `newsroom-collection-of-faces.jpg` |
 | Fade | Numerals close to the minute hand | Numerals fade over a wider arc | `newsroom-collection-of-faces.jpg` |
@@ -194,7 +275,9 @@ off, which keeps the detailed layout.
   (large number, down and up chevrons, name and room), a tile-less clock with hour ticks at top
   right, and four small tiles with icon, bold name, and lighter room name.
 - **Calendar**: the light card, red month and time, navy weekday letters, blue day numbers, grey
-  days outside the month, today in a navy circle, and the very large red day number behind.
+  days outside the month, and today in a navy circle. The very large red day number is the far
+  layout. Apple's image draws it behind the grid as well; here the near layout shows the grid
+  alone, because the number made the dates hard to read.
 - **Analog**: a solid green dial, four oversized thin numerals that run off the edges, white hands
   with a thin stem and a rounded bar, and "WED 1" at the bottom left.
 - **Fade**: a single-color dial, tone-on-tone numerals rotated around the dial and fading away
@@ -398,9 +481,14 @@ none of it is a secret, and nothing is logged.
 ## UI tests and screenshots
 
 `HomePadUITests` walks the app in the simulator and saves a screenshot at each stop to
-`design/screenshots`. Run it with `Scripts/ui-walkthrough.sh` for the iPad hub and
-`Scripts/ui-walkthrough.sh "iPhone 18 Pro"` for the companion. The hub tests skip on an iPhone
-and the companion tests skip on an iPad. Controls are found by accessibility identifier. A
+`design/screenshots`. Each simulator runs its own tests and skips the rest:
+
+| Command | Runs |
+|---|---|
+| `Scripts/ui-walkthrough.sh` (iPad Pro 13-inch) | `HubWalkthroughTests`: the hub |
+| `Scripts/ui-walkthrough.sh "iPhone 18 Pro"` | `CompanionWalkthroughTests`: the companion's tabs |
+| `Scripts/ui-walkthrough.sh "iPad mini (A20 Pro)"` | `DuoWalkthroughTests`: the companion and the hub framed to the sizes of iPhone Duo's displays |
+ Controls are found by accessibility identifier. A
 container must not carry an identifier, because it replaces the identifiers of the controls
 inside it.
 
@@ -417,6 +505,9 @@ alone read them, and none is a preference.
 | `HOMEPAD_UITEST_CANVAS=fill` | The fill layout for this launch, whatever Settings says. |
 | `HOMEPAD_UITEST_NIGHT=1` | The night clock, whatever the schedule says. |
 | `HOMEPAD_UITEST_SKIP_WELCOME=1` | No first-run welcome. |
+| `HOMEPAD_UITEST_ROLE=hub\|companion` | The role for this launch, whatever the device and Settings say. |
+| `HOMEPAD_UITEST_VIEWPORT=626x890` | The whole app framed to this size in points, centered on black, with the size classes a display of that size reports: regular width when the shorter side is at least 600 points, regular height from 480 points. |
+| `HOMEPAD_UITEST_FOLD=1` | Hub only. The two panes in halves with a gap between them, as if the display were partly folded. |
 | `HOMEPAD_UITEST_DEVICE_UNLOCK=1` | A camera match without a liveness proof is waiting and Touch ID is offered. A tap on the affordance confirms it. The hook stands in for the `deviceUnlock` slot, because the simulator has no biometric hardware. |
 
 Screenshot names:
@@ -436,5 +527,18 @@ Screenshot names:
 | `c30` | Night hook | Night clock |
 | `c40` to `c42` | Touch ID hook | Home Screen and switcher with the Touch ID affordance, then Messages opened by it |
 | `p10` to `p13`, `p20` | iPhone | The four companion tabs, and the Hub tab with a summary |
+| `d10` to `d14` | iPad mini, companion, 466 by 678 | Outer display: the four tabs, and the Hub tab with no hub |
+| `d20` to `d23` | iPad mini, companion, 626 by 890 | Inner display upright: two columns with Beam, Apps, and People, and with no hub |
+| `d30`, `d31` | iPad mini, companion, 890 by 626 | Inner display on its side: two columns |
+| `d32`, `d33` | iPad mini, companion, 678 by 466 | Outer display on its side: tabs |
+| `d40` | iPad mini, companion, full screen | An iPad set to Companion: two columns |
+| `h10` to `h12` | iPad mini, hub, 626 by 890 | Inner display upright: face, Home Screen, Alarms |
+| `h20` to `h23` | iPad mini, hub, 466 by 678 | Outer display: face, Home Screen, Alarms, profile switcher |
+| `h30`, `h31`, `h32` | iPad mini, hub, 890 by 626 and 678 by 466 | Both displays on their side |
+| `h40` to `h42` | iPad mini, hub, 890 by 626, fold hook | Folded like a book: the face on one side; status, timers, and widgets on the other |
+| `h43` | iPad mini, hub, 626 by 890, fold hook | Folded across: the face above, the rest below |
+| `h50` | iPad mini, hub, 626 by 890, fill layout | The second column below the canvas |
+
+The `d` and `h` images show the whole iPad mini screen with the framed app in the middle.
 
 `design/screenshots/before/` holds the walkthrough from before the visual pass.
