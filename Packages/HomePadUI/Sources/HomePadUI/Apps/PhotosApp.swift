@@ -22,14 +22,11 @@ struct PhotosApp: View {
         AppScreen(title: "Photos", onClose: onClose) {
             VStack(spacing: metrics.pt(2.4)) {
                 if library.picked.isEmpty {
-                    Spacer()
-                    Image(systemName: "photo.on.rectangle.angled")
-                        .font(.system(size: metrics.pt(14)))
-                        .foregroundStyle(Color.hubSecondaryText)
-                    Text("Choose photos for the Photos face.")
-                        .font(.system(size: metrics.text(3.6), weight: .semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
+                    HubEmptyState(
+                        symbol: "photo.on.rectangle.angled",
+                        title: "No Photos Yet",
+                        message: "Choose photos for the Photos face."
+                    )
                 } else {
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {

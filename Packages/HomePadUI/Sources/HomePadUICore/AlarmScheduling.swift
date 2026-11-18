@@ -34,6 +34,36 @@ public enum AlarmError: Error, Equatable, Sendable {
     case limitReached(Int)
 }
 
+/// The time being chosen for a new alarm. Stepping wraps: the hour around the day, the minute
+/// within the hour, so one control never moves the other.
+public struct AlarmTimeDraft: Equatable, Sendable {
+    public static let minuteStep = 5
+
+    public private(set) var hour: Int
+    public private(set) var minute: Int
+
+    /// Starts on the next step at or after the given time, so a new alarm is never in the past
+    /// by a minute or two.
+    public init(hour: Int, minute: Int) {
+        let step = Self.minuteStep
+        let total = Self.wrap(hour * 60 + (minute + step - 1) / step * step, 24 * 60)
+        self.hour = total / 60
+        self.minute = total % 60
+    }
+
+    public mutating func stepHour(by delta: Int) {
+        hour = Self.wrap(hour + delta, 24)
+    }
+
+    public mutating func stepMinute(by delta: Int) {
+        minute = Self.wrap(minute + delta * Self.minuteStep, 60)
+    }
+
+    private static func wrap(_ value: Int, _ modulus: Int) -> Int {
+        ((value % modulus) + modulus) % modulus
+    }
+}
+
 /// The hub's alarms. Shared by the household, like a bedside clock.
 public struct AlarmBook: Equatable, Sendable {
     public static let limit = 20

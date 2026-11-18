@@ -208,6 +208,8 @@ public enum HomeGridPacker {
     }
 
     /// First fit, scanning rows top to bottom, so a widget never leaves a hole an icon could fill.
+    /// A widget starts on an even column, which keeps widgets against the edges with icons in
+    /// pairs beside them instead of stranding one icon on each side.
     public static func pack(_ items: [HomeScreenItem], columns: Int) -> Result {
         let columns = max(2, columns)
         var occupied = Set<Int>()
@@ -235,7 +237,7 @@ public enum HomeGridPacker {
     private static func fits(slot: Int, span: Int, columns: Int, occupied: Set<Int>) -> Bool {
         let row = slot / columns
         let column = slot % columns
-        guard column + span <= columns else { return false }
+        guard column + span <= columns, column % span == 0 else { return false }
         for dy in 0..<span {
             for dx in 0..<span where occupied.contains((row + dy) * columns + column + dx) {
                 return false

@@ -30,7 +30,7 @@ struct MusicApp: View {
             backdrop(music.artwork)
             VStack(spacing: 0) {
                 HStack {
-                    GlassCircleButton(symbol: "xmark", label: "Close", action: onClose)
+                    GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
                     Spacer()
                     RoutePicker()
                         .frame(width: metrics.pt(9), height: metrics.pt(9))
@@ -66,7 +66,7 @@ struct MusicApp: View {
             }
             .padding(metrics.pt(4))
         }
-        .onAppear { music.start() }
+        .startsOnFirstUse { music.start() }
     }
 
     private func backdrop(_ artwork: UIImage?) -> some View {
@@ -152,13 +152,23 @@ struct MirrorApp: View {
                     .clipped()
                     .accessibilityLabel("Mirror")
             case .denied:
-                notice("HomePad needs the camera to be a mirror. Allow Camera access in Settings.", showsSettings: true)
+                HubEmptyState(
+                    symbol: "camera.fill",
+                    title: "Camera Access Is Off",
+                    message: "The Mirror shows the front camera. Allow Camera access in Settings to use it."
+                ) {
+                    HubSettingsButton()
+                }
             case .unavailable:
-                notice("The front camera is not available.", showsSettings: false)
+                HubEmptyState(
+                    symbol: "person.crop.square",
+                    title: "Mirror Is Not Available",
+                    message: "The front camera cannot be used right now."
+                )
             }
             VStack {
                 HStack {
-                    GlassCircleButton(symbol: "xmark", label: "Close", action: onClose)
+                    GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
                     Spacer()
                 }
                 Spacer()
@@ -176,23 +186,5 @@ struct MirrorApp: View {
         }
         .task { await camera.start() }
         .onDisappear { camera.stop() }
-    }
-
-    private func notice(_ text: LocalizedStringKey, showsSettings: Bool) -> some View {
-        VStack(spacing: metrics.pt(3)) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: metrics.pt(12)))
-                .foregroundStyle(Color.hubSecondaryText)
-            Text(text)
-                .font(.system(size: metrics.text(3.6), weight: .semibold))
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.center)
-            if showsSettings {
-                OpenSettingsButton()
-                    .font(.system(size: metrics.text(3.2), weight: .semibold))
-                    .buttonStyle(.glassProminent)
-            }
-        }
-        .padding(metrics.pt(10))
     }
 }

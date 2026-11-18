@@ -1,5 +1,3 @@
-import HomePadAnimations
-import HomePadAnimationsCore
 import HomePadCore
 import HomePadUICore
 import SwiftUI
@@ -31,10 +29,14 @@ struct RecipesApp: View {
                 entry(error: error)
             case .loading:
                 AppScreen(title: "Recipes", onClose: onClose) {
-                    ProgressView("Reading the recipe")
-                        .font(.system(size: metrics.text(3.4)))
-                        .tint(.white)
-                        .foregroundStyle(.white)
+                    VStack(spacing: metrics.pt(3)) {
+                        ProgressView()
+                            .controlSize(.extraLarge)
+                            .tint(.white)
+                        Text("Reading the recipe")
+                            .font(.system(size: metrics.text(3.6), weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
                 }
             case .loaded(let recipe):
                 switch stage {
@@ -55,41 +57,56 @@ struct RecipesApp: View {
 
     // MARK: Entry
 
+    /// With no recipe open, the screen is laid out like a recipe's cover: a full-bleed picture,
+    /// a large title at the bottom, and the controls underneath.
     private func entry(error: RecipeLoadError?) -> some View {
-        AppScreen(title: "Recipes", onClose: onClose) {
-            VStack(spacing: metrics.pt(3)) {
-                Spacer(minLength: 0)
-                HomePadAnimationView(.listening, loop: true)
-                    .frame(width: metrics.pt(24), height: metrics.pt(24))
-                Text("Paste a link to a recipe, or beam one from your iPhone.")
-                    .font(.system(size: metrics.text(3.6), weight: .semibold))
+        ZStack {
+            LinearGradient(colors: [Color(RainbowTint.orange), Color(RainbowTint.red)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Circle()
+                .fill(.white.opacity(0.14))
+                .frame(width: metrics.pt(62))
+                .offset(x: metrics.pt(14), y: metrics.pt(-14))
+            Circle()
+                .stroke(.white.opacity(0.2), lineWidth: metrics.pt(1.2))
+                .frame(width: metrics.pt(46))
+                .offset(x: metrics.pt(14), y: metrics.pt(-14))
+            Image(systemName: "fork.knife")
+                .font(.system(size: metrics.pt(22), weight: .medium))
+                .foregroundStyle(.white.opacity(0.9))
+                .offset(x: metrics.pt(14), y: metrics.pt(-14))
+            LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: metrics.pt(1)) {
+                GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
+                Spacer()
+                Text("Recipes")
+                    .font(.system(size: metrics.text(6), weight: .bold))
                     .foregroundStyle(.white)
-                    .multilineTextAlignment(.center)
-                HStack(spacing: metrics.pt(2)) {
-                    TextField("Recipe link", text: $address)
-                        .font(.system(size: metrics.text(3.4)))
+                    .accessibilityAddTraits(.isHeader)
+                Text(error.map(message(for:)) ?? "Paste a link to a recipe, or beam one from your iPhone.")
+                    .font(.system(size: metrics.text(3.4), weight: error == nil ? .regular : .semibold))
+                    .foregroundStyle(.white.opacity(error == nil ? 0.8 : 1))
+                    .lineLimit(2)
+                HStack(spacing: metrics.pt(2.4)) {
+                    TextField("Recipe link", text: $address, prompt: Text("Recipe link").foregroundStyle(.white.opacity(0.6)))
+                        .font(.system(size: metrics.text(3.4), weight: .semibold))
                         .textFieldStyle(.plain)
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.go)
                         .foregroundStyle(.white)
-                        .padding(.horizontal, metrics.pt(3.5))
-                        .frame(height: metrics.pt(10))
-                        .background(Capsule().fill(Color.hubTileFill))
+                        .padding(.horizontal, metrics.pt(4))
+                        .frame(height: metrics.pt(11.5))
+                        .hubGlass(in: Capsule())
                         .onSubmit(load)
-                    GlassCircleButton(symbol: "arrow.right", label: "Open Recipe", size: 10, action: load)
+                        .accessibilityIdentifier("recipes.link")
+                    GlassCircleButton(symbol: "arrow.right", label: "Open Recipe", size: 11.5, identifier: "recipes.open", action: load)
                 }
-                if let error {
-                    Text(message(for: error))
-                        .font(.system(size: metrics.text(3.1), weight: .medium))
-                        .foregroundStyle(Color(RainbowTint.orange))
-                        .multilineTextAlignment(.center)
-                }
-                Spacer(minLength: 0)
+                .padding(.top, metrics.pt(3))
             }
-            .padding(.horizontal, metrics.pt(5))
+            .padding(metrics.pt(5))
         }
+        .accessibilityElement(children: .contain)
     }
 
     private func load() {
@@ -129,7 +146,7 @@ struct RecipesApp: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: metrics.pt(1)) {
                 HStack(alignment: .top) {
-                    GlassCircleButton(symbol: "xmark", label: "Close Recipe") { environment.recipes.close() }
+                    GlassCircleButton(symbol: "xmark", label: "Close Recipe", identifier: "recipes.closeRecipe") { environment.recipes.close() }
                     Spacer()
                     TimelineView(.periodic(from: .startOfCurrentSecond, by: 10)) { timeline in
                         Text(FaceText.clock(timeline.date, calendar: calendar, density: .glanceable, units: units).digits)
@@ -152,8 +169,8 @@ struct RecipesApp: View {
                     .foregroundStyle(.white.opacity(0.75))
                     .lineLimit(1)
                 HStack(spacing: metrics.pt(2.4)) {
-                    GlassCapsuleButton(title: "Ingredients", symbol: "checklist") { stage = .ingredients }
-                    GlassCapsuleButton(title: "Start Cooking", symbol: "frying.pan.fill") {
+                    GlassCapsuleButton(title: "Ingredients", symbol: "checklist", identifier: "recipes.ingredients") { stage = .ingredients }
+                    GlassCapsuleButton(title: "Start Cooking", symbol: "frying.pan.fill", identifier: "recipes.cook") {
                         stepIndex = 0
                         stage = .cooking
                     }
@@ -192,7 +209,7 @@ struct RecipesApp: View {
             Color.black
             VStack(alignment: .leading, spacing: metrics.pt(2.5)) {
                 HStack(spacing: metrics.pt(3)) {
-                    GlassCircleButton(symbol: "chevron.left", label: "Back") { stage = .cover }
+                    GlassCircleButton(symbol: "chevron.left", label: "Back", identifier: "recipes.back") { stage = .cover }
                     Text("Ingredients")
                         .font(.system(size: metrics.text(4.6), weight: .bold))
                         .foregroundStyle(.white)
@@ -249,7 +266,7 @@ struct RecipesApp: View {
             Color.black
             VStack(alignment: .leading, spacing: metrics.pt(2.4)) {
                 HStack(spacing: metrics.pt(3)) {
-                    GlassCircleButton(symbol: "xmark", label: "Stop Cooking") { stage = .cover }
+                    GlassCircleButton(symbol: "xmark", label: "Stop Cooking", identifier: "recipes.stopCooking") { stage = .cover }
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Step \(index + 1) of \(steps.count)")
                             .font(.system(size: metrics.text(3.4), weight: .bold))
@@ -269,9 +286,9 @@ struct RecipesApp: View {
                                 .foregroundStyle(.white)
                         }
                         Text(step.text)
-                            .font(.system(size: metrics.text(5), weight: .medium))
+                            .font(.system(size: metrics.text(6.2), weight: .medium))
                             .foregroundStyle(.white)
-                            .lineSpacing(metrics.pt(0.8))
+                            .lineSpacing(metrics.pt(1))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -290,7 +307,7 @@ struct RecipesApp: View {
                     } else {
                         Spacer()
                     }
-                    GlassCircleButton(symbol: "chevron.right", label: "Next Step", size: 11.5) { stepIndex = min(steps.count - 1, index + 1) }
+                    GlassCircleButton(symbol: "chevron.right", label: "Next Step", size: 11.5, identifier: "recipes.next") { stepIndex = min(steps.count - 1, index + 1) }
                         .disabled(index == steps.count - 1)
                         .opacity(index == steps.count - 1 ? 0.4 : 1)
                 }

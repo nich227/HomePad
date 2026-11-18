@@ -81,6 +81,7 @@ struct ModularFace: View {
         }
         .lineLimit(1)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .startsOnFirstUse { environment.music.start() }
     }
 
     private var weatherTile: some View {
@@ -92,12 +93,19 @@ struct ModularFace: View {
             }
             .font(.system(size: metrics.text(2.5), weight: .semibold))
             .foregroundStyle(.white)
-            Text(weather.map { units.degrees($0.temperatureCelsius) } ?? "--\u{00B0}")
-                .font(.system(size: metrics.pt(15), weight: .regular))
-                .foregroundStyle(.white)
-            Image(systemName: weather?.symbolName ?? "cloud.fill")
+            if let weather {
+                Text(units.degrees(weather.temperatureCelsius))
+                    .font(.system(size: metrics.pt(15), weight: .regular))
+                    .foregroundStyle(.white)
+            }
+            Image(systemName: weather?.symbolName ?? "cloud.sun.fill")
                 .symbolRenderingMode(.multicolor)
-                .font(.system(size: metrics.text(3)))
+                .font(.system(size: weather == nil ? metrics.pt(12) : metrics.text(3)))
+            if weather == nil {
+                Text("Not set up")
+                    .font(.system(size: metrics.text(2.4), weight: .semibold))
+                    .foregroundStyle(Color.hubSecondaryText)
+            }
             if let weather {
                 Text(weather.conditionText)
                     .font(.system(size: metrics.text(2.4), weight: .semibold))

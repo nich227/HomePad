@@ -2,27 +2,45 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// The home on a light three-column grid: a clock, the thermostat, scenes, accessories, and
-/// cameras. Lit tiles mean the accessory is on.
+/// The home on a three-column grid of tiles: a clock, the thermostat, cameras, scenes, and
+/// accessories. A lit tile means the accessory is on.
 struct HomeApp: View {
     let onClose: () -> Void
     @Environment(\.hubMetrics) private var metrics
+    @Environment(\.hubMayRunScenes) private var mayRunScenes
     @Environment(HubEnvironment.self) private var environment
     @State private var liveCameraID: String?
 
     var body: some View {
         let home = environment.home
         ZStack {
-            AppScreen(title: "Home", background: .white, ink: Color(white: 0.15), onClose: onClose) {
+            AppScreen(title: "Home", onClose: onClose) {
                 switch home.access {
                 case .ready:
                     grid(home.snapshot)
                 case .denied:
-                    message("HomePad needs access to your home. Allow Home access in Settings.", showsSettings: true)
+                    HubEmptyState(
+                        symbol: "house.fill",
+                        title: "Home Access Is Off",
+                        message: "To control lights, scenes, and cameras from here, allow Home access in Settings.",
+                        tint: Color(RainbowTint.orange)
+                    ) {
+                        HubSettingsButton()
+                    }
                 case .noHomes:
-                    message("No home is set up. Add one in the Home app.", showsSettings: false)
+                    HubEmptyState(
+                        symbol: "house.fill",
+                        title: "No Home Yet",
+                        message: "Set up a home in the Home app on this iPad. Its accessories and scenes will appear here.",
+                        tint: Color(RainbowTint.orange)
+                    )
                 case .unknown:
-                    ProgressView()
+                    HubEmptyState(
+                        symbol: "house.fill",
+                        title: "Home",
+                        message: "Looking for your home.",
+                        tint: Color(RainbowTint.orange)
+                    )
                 }
             }
             if let liveCameraID {
@@ -32,31 +50,11 @@ struct HomeApp: View {
                     GlassCircleButton(symbol: "xmark", label: "Close Camera") { self.liveCameraID = nil }
                         .padding(metrics.pt(4))
                 }
-                .environment(\.colorScheme, .dark)
                 .transition(.opacity)
             }
         }
-        .environment(\.colorScheme, .light)
-        .onAppear { home.start() }
+        .startsOnFirstUse { home.start() }
         .animation(.smooth(duration: 0.3), value: liveCameraID)
-    }
-
-    private func message(_ text: LocalizedStringKey, showsSettings: Bool) -> some View {
-        VStack(spacing: metrics.pt(3)) {
-            Image(systemName: "house.fill")
-                .font(.system(size: metrics.pt(14)))
-                .foregroundStyle(Color(RainbowTint.orange))
-            Text(text)
-                .font(.system(size: metrics.text(3.6), weight: .semibold))
-                .foregroundStyle(Color(white: 0.2))
-                .multilineTextAlignment(.center)
-            if showsSettings {
-                OpenSettingsButton()
-                    .font(.system(size: metrics.text(3.2), weight: .semibold))
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .padding(metrics.pt(8))
     }
 
     private func grid(_ snapshot: HomeSnapshot) -> some View {
@@ -67,18 +65,24 @@ struct HomeApp: View {
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
                     TimelineView(.periodic(from: .startOfCurrentSecond, by: 1)) { timeline in
-                        AnalogDial(date: timeline.date, markers: .numerals, inkColor: Color(red: 0.35, green: 0.3, blue: 0.6), secondColor: Color(red: 0.35, green: 0.3, blue: 0.6))
+                        AnalogDial(date: timeline.date, markers: .numerals)
                     }
                     .frame(width: cell, height: cell)
                     if let thermostat = snapshot.thermostats.first {
-                        ThermostatTile(thermostat: thermostat, style: .light, numberSize: 13)
+                        ThermostatTile(thermostat: thermostat, style: .solid, numberSize: 15)
                             .frame(height: cell)
                     } else {
                         RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous)
-                            .fill(Color(white: 0.9))
-                            .overlay(Image(systemName: "house.fill").font(.system(size: metrics.pt(10))).foregroundStyle(Color(white: 0.45)))
+                            .fill(Color.hubTileFill)
+                            .overlay(
+                                VStack(spacing: metrics.pt(1)) {
+                                    Image(systemName: "house.fill").font(.system(size: metrics.pt(9)))
+                                    Text(snapshot.homeName).font(.system(size: metrics.text(3.2), weight: .semibold))
+                                }
+                                .foregroundStyle(.white)
+                            )
                             .frame(height: cell)
-                            .accessibilityHidden(true)
+                            .accessibilityElement(children: .combine)
                     }
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {
@@ -86,6 +90,14 @@ struct HomeApp: View {
                         tileView(tile)
                             .frame(width: cell, height: cell)
                     }
+                }
+                if !mayRunScenes, !snapshot.scenes.isEmpty {
+                    Label("Scenes run only for household members the hub recognizes.", systemImage: "lock.fill")
+                        .font(.system(size: metrics.text(2.9), weight: .medium))
+                        .foregroundStyle(Color.hubSecondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, metrics.pt(1))
+                        .accessibilityIdentifier("home.scenesLocked")
                 }
             }
         }
@@ -96,7 +108,7 @@ struct HomeApp: View {
     private func tileView(_ tile: HomeTile) -> some View {
         switch tile {
         case .camera(let camera):
-            HomeTileView(tile: tile, style: .light)
+            HomeTileView(tile: tile, style: .solid)
                 .allowsHitTesting(false)
                 .overlay {
                     Button {
@@ -108,7 +120,7 @@ struct HomeApp: View {
                     .accessibilityLabel(Text("Show \(camera.name) live"))
                 }
         case .accessory(let accessory) where accessory.brightness != nil:
-            HomeTileView(tile: tile, style: .light)
+            HomeTileView(tile: tile, style: .solid)
                 .contextMenu {
                     ForEach([100, 75, 50, 25], id: \.self) { level in
                         Button {
@@ -122,7 +134,7 @@ struct HomeApp: View {
                     }
                 }
         default:
-            HomeTileView(tile: tile, style: .light)
+            HomeTileView(tile: tile, style: .solid)
         }
     }
 }

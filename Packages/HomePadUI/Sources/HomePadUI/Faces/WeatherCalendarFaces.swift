@@ -16,11 +16,11 @@ struct WeatherFace: View {
     var body: some View {
         let weather = environment.weather.snapshot
         ZStack {
-            sky
+            WeatherSky()
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: metrics.pt(0.4)) {
-                        Label(weather?.conditionText ?? String(localized: "Weather Unavailable"), systemImage: weather?.symbolName ?? "cloud.fill")
+                        Label(weather?.conditionText ?? String(localized: "Weather Is Not Set Up"), systemImage: weather?.symbolName ?? "cloud.fill")
                         if let weather, detailed {
                             Text("H:\(units.degrees(weather.highCelsius)) L:\(units.degrees(weather.lowCelsius))")
                         }
@@ -31,14 +31,22 @@ struct WeatherFace: View {
                 }
                 .font(.system(size: metrics.text(detailed ? 3.4 : 4.6), weight: .semibold))
                 .foregroundStyle(.white)
-                Text(weather.map { units.degrees($0.temperatureCelsius) } ?? "--\u{00B0}")
-                    .font(.system(size: metrics.pt(detailed ? 34 : 46), weight: .medium))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .minimumScaleFactor(0.5)
-                    .lineLimit(1)
-                    .padding(.top, metrics.pt(2))
+                if let weather {
+                    Text(units.degrees(weather.temperatureCelsius))
+                        .font(.system(size: metrics.pt(detailed ? 34 : 46), weight: .medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .padding(.top, metrics.pt(2))
+                } else {
+                    Image(systemName: "cloud.sun.fill")
+                        .font(.system(size: metrics.pt(detailed ? 30 : 40)))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .padding(.top, metrics.pt(6))
+                        .accessibilityHidden(true)
+                }
                 Spacer(minLength: 0)
-                if detailed {
+                if detailed, weather != nil {
                     HStack(alignment: .top) {
                         stat("sunset.fill", weather?.sunset.map { $0.formatted(date: .omitted, time: .shortened) }, "Sunset")
                         stat("wind", weather?.windKilometersPerHour.map { windText($0) }, "Wind")
@@ -71,14 +79,19 @@ struct WeatherFace: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var sky: some View {
+}
+
+/// A daytime sky with soft cloud shapes, drawn rather than photographed.
+struct WeatherSky: View {
+    @Environment(\.hubMetrics) private var metrics
+
+    var body: some View {
         ZStack {
             LinearGradient(
                 colors: [Color(red: 0.62, green: 0.76, blue: 0.9), Color(red: 0.33, green: 0.56, blue: 0.86), Color(red: 0.2, green: 0.45, blue: 0.82)],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            // Soft cloud shapes, drawn rather than photographed.
             ForEach(0..<4, id: \.self) { index in
                 Ellipse()
                     .fill(.white.opacity(0.55))
@@ -87,6 +100,7 @@ struct WeatherFace: View {
                     .offset(x: metrics.pt(CGFloat(index * 22 - 30)), y: metrics.pt(CGFloat(-34 + index * 9)))
             }
         }
+        .clipped()
         .accessibilityHidden(true)
     }
 }

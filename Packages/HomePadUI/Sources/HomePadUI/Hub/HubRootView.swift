@@ -15,6 +15,8 @@ public struct HubRootView: View {
     private let facePosition: (@MainActor () -> FacePosition?)?
     private let ambientLight: (@MainActor () -> AmbientLightHint?)?
     private let onSummaryChange: (@MainActor (HubStatusSummary) -> Void)?
+    private let onWelcomeFinished: (@MainActor () -> Void)?
+    private let hooks = HubTestHooks.current
 
     @State private var model: HubModel
     @FocusState private var hasKeyboardFocus: Bool
@@ -28,6 +30,9 @@ public struct HubRootView: View {
     ///   - facePosition: Where the viewer is in front of the screen, for the Flow face.
     ///   - ambientLight: How bright the room looks, for night mode's "follow room light".
     ///   - onSummaryChange: Called when what the hub shows changes, to forward to companions.
+    ///   - onWelcomeFinished: Called once, when the first-run welcome is out of the way or was
+    ///     never needed. Start anything that makes the system ask for permission here, such as
+    ///     the camera, so the prompt does not land on the welcome.
     public init(
         session: HouseholdSession,
         settings: HomePadSettings,
@@ -36,7 +41,8 @@ public struct HubRootView: View {
         navigator: HubNavigator,
         facePosition: (@MainActor () -> FacePosition?)? = nil,
         ambientLight: (@MainActor () -> AmbientLightHint?)? = nil,
-        onSummaryChange: (@MainActor (HubStatusSummary) -> Void)? = nil
+        onSummaryChange: (@MainActor (HubStatusSummary) -> Void)? = nil,
+        onWelcomeFinished: (@MainActor () -> Void)? = nil
     ) {
         self.session = session
         self.settings = settings
@@ -46,6 +52,7 @@ public struct HubRootView: View {
         self.facePosition = facePosition
         self.ambientLight = ambientLight
         self.onSummaryChange = onSummaryChange
+        self.onWelcomeFinished = onWelcomeFinished
         _model = State(initialValue: HubModel(layoutStore: environment.layoutStore))
     }
 
@@ -53,14 +60,31 @@ public struct HubRootView: View {
         session.activeProfile.map { .profile($0.id) } ?? .guest
     }
 
+    /// Preferences as set in Settings. A UI test may force the canvas layout for one launch.
+    private var currentPreferences: HubPreferences {
+        var preferences = HubPreferences(settings: settings)
+        if let canvas = hooks.canvas {
+            preferences.canvas = canvas
+        }
+        return preferences
+    }
+
+    /// The first-run welcome is due: nobody is enrolled, people can be added from here, and it
+    /// has not been dismissed in this launch.
+    private func needsWelcome(_ preferences: HubPreferences) -> Bool {
+        session.profiles.isEmpty && preferences.setupMode && !model.helloDismissed && !hooks.skipsWelcome
+    }
+
     public var body: some View {
-        let preferences = HubPreferences(settings: settings)
+        let preferences = currentPreferences
+        let needsWelcome = needsWelcome(preferences)
         let audience = AudienceContext(
             isGuest: session.isGuest,
             isPersonalContentUnlocked: session.isPersonalContentUnlocked,
             setupMode: preferences.setupMode
         )
         let density = FaceDensity(proximity: session.proximity, adaptiveDetail: preferences.adaptiveDetail)
+        let showsDeviceUnlock = VisibilityPolicy.showsDeviceUnlock(context: audience, isDeviceUnlockOffered: isDeviceUnlockOffered)
         GeometryReader { proxy in
             let layout = CanvasLayout(
                 width: proxy.size.width,
@@ -71,15 +95,33 @@ public struct HubRootView: View {
             let metrics = HubMetrics(side: layout.square.width, textScale: dynamicTypeSize.hubTextScale)
             ZStack(alignment: .topLeading) {
                 Color.black
-                canvas(preferences: preferences, audience: audience, metrics: metrics)
+                canvas(preferences: preferences, audience: audience, metrics: metrics, hasBezelStatus: layout.status != nil)
                     .frame(width: layout.square.width, height: layout.square.height)
                     .clipShape(RoundedRectangle(cornerRadius: layout.square.width * CGFloat(CanvasLayout.cornerRadiusFraction), style: .continuous))
                     .offset(x: layout.square.x, y: layout.square.y)
-                if let side = layout.side, model.night == .day {
+                if let side = layout.side, model.night == .day, !needsWelcome {
                     SideColumn(isWide: side.width > side.height)
                         .frame(width: side.width, height: side.height)
                         .offset(x: side.x, y: side.y)
                         .transition(.opacity)
+                }
+                if let status = layout.status, model.night == .day, !needsWelcome {
+                    BezelStatusView(
+                        profile: session.activeProfile,
+                        isSomeonePresent: session.isSomeonePresent,
+                        isOnFaces: navigator.state.surface == .faces,
+                        showsAvatar: navigator.state.surface != .homeScreen,
+                        indicator: slots.recognitionIndicator,
+                        onProfile: { model.showsSwitcher = true },
+                        onToggleSurface: {
+                            model.touch()
+                            navigator.state.surface == .faces ? navigator.showHomeScreen() : navigator.showFaces()
+                        },
+                        onUnlock: { runDeviceUnlock(thenOpen: nil) }
+                    )
+                    .frame(width: status.width, height: status.height)
+                    .offset(x: status.x, y: status.y)
+                    .transition(.opacity)
                 }
                 if navigator.state.isTakeoverPresented {
                     BeamTakeoverView(content: slots.beam) { navigator.dismissBeam() }
@@ -95,6 +137,9 @@ public struct HubRootView: View {
         .environment(\.hubUnits, HubUnits(preferences: preferences))
         .environment(\.faceDensity, density)
         .environment(\.hubAudience, audience)
+        .environment(\.hubMayPrompt, !needsWelcome)
+        .environment(\.hubMayRunScenes, HomeControlPolicy.mayRunScenes(activation: session.activation, profiles: session.profiles))
+        .environment(\.hubShowsDeviceUnlock, showsDeviceUnlock)
         .environment(environment)
         .environment(session)
         .environment(navigator)
@@ -120,11 +165,16 @@ public struct HubRootView: View {
         }
         .onAppear {
             hasKeyboardFocus = true
+            applyTestHooks()
             model.adopt(owner: owner, enabledFaces: preferences.faces.enabledFaces)
             model.screen.setKeepAwake(preferences.keepAwake)
             environment.alarms.start(calendar: calendar)
-            environment.music.start()
             environment.weather.configure(location: preferences.weatherLocation)
+        }
+        .onChange(of: needsWelcome, initial: true) { _, needed in
+            if !needed, model.markWelcomeFinished() {
+                onWelcomeFinished?()
+            }
         }
         .onDisappear { model.screen.restore() }
         .onChange(of: owner) { _, newOwner in
@@ -149,7 +199,7 @@ public struct HubRootView: View {
                 return
             }
             settings.refresh()
-            model.screen.setKeepAwake(HubPreferences(settings: settings).keepAwake)
+            model.screen.setKeepAwake(currentPreferences.keepAwake)
             while !Task.isCancelled {
                 housekeeping()
                 try? await Task.sleep(for: .seconds(3))
@@ -160,7 +210,7 @@ public struct HubRootView: View {
     // MARK: Canvas
 
     @ViewBuilder
-    private func canvas(preferences: HubPreferences, audience: AudienceContext, metrics: HubMetrics) -> some View {
+    private func canvas(preferences: HubPreferences, audience: AudienceContext, metrics: HubMetrics, hasBezelStatus: Bool) -> some View {
         let surface = navigator.state.surface
         let onFaces = surface == .faces
         let blursFace = !onFaces && preferences.homeWallpaper == .face
@@ -173,14 +223,16 @@ public struct HubRootView: View {
                 .simultaneousGesture(swipe(up: { navigator.showHomeScreen() }))
 
             if onFaces {
-                faceChrome(metrics: metrics)
+                faceChrome(metrics: metrics, showsHomeButton: !hasBezelStatus)
                     .transition(.opacity)
             } else {
                 HomeScreenView(
                     layout: model.layout,
                     profileCount: session.profiles.count,
-                    recognitionIndicator: slots.recognitionIndicator,
+                    recognitionIndicator: hasBezelStatus ? nil : slots.recognitionIndicator,
                     onOpen: { open($0, audience: audience) },
+                    onUnlock: { runDeviceUnlock(thenOpen: $0) },
+                    showsFaceButton: !hasBezelStatus,
                     onMove: { model.move(itemID: $0, onto: $1) },
                     onProfile: { model.showsSwitcher = true },
                     onClose: { navigator.showFaces() }
@@ -202,7 +254,7 @@ public struct HubRootView: View {
             alerts
                 .zIndex(5)
 
-            if session.profiles.isEmpty, preferences.setupMode, !model.helloDismissed, model.night == .day {
+            if needsWelcome(preferences), model.night == .day {
                 HelloOverlay(
                     onAddPeople: {
                         model.helloDismissed = true
@@ -215,9 +267,12 @@ public struct HubRootView: View {
             }
 
             if model.showsSwitcher {
-                ProfileSwitcher(session: session, showsSetupHint: VisibilityPolicy.needsSetupHint(profileCount: session.profiles.count, setupMode: preferences.setupMode)) {
-                    model.showsSwitcher = false
-                }
+                ProfileSwitcher(
+                    session: session,
+                    showsSetupHint: VisibilityPolicy.needsSetupHint(profileCount: session.profiles.count, setupMode: preferences.setupMode),
+                    onUnlock: { runDeviceUnlock(thenOpen: nil) },
+                    onClose: { model.showsSwitcher = false }
+                )
                 .transition(.opacity)
                 .zIndex(7)
             }
@@ -226,26 +281,17 @@ public struct HubRootView: View {
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded {
             model.touch()
-            model.updateNight(schedule: preferences.night, ambient: ambientLight?(), now: Date(), calendar: calendar)
+            model.updateNight(schedule: preferences.night, ambient: ambientLight?(), now: Date(), calendar: calendar, forced: hooks.forcesNight)
         })
     }
 
-    /// What floats over a face: the profile chip, the timer strip, and a Home Screen button for
-    /// people using a pointer or assistive technology.
-    private func faceChrome(metrics: HubMetrics) -> some View {
-        let detailed = FaceDensity(proximity: session.proximity, adaptiveDetail: HubPreferences(settings: settings).adaptiveDetail) == .detailed
-        return VStack(spacing: 0) {
-            HStack(spacing: metrics.pt(1.5)) {
-                Spacer()
-                slots.recognitionIndicator()
-                ProfileChip(profile: session.activeProfile, isSomeonePresent: session.isSomeonePresent) {
-                    model.showsSwitcher = true
-                }
-            }
-            .opacity(detailed ? 1 : 0.55)
+    /// What floats over a face: the timer strip, and, only when there is no room beside the
+    /// canvas for it, a Home Screen button for people using a pointer or assistive technology.
+    private func faceChrome(metrics: HubMetrics, showsHomeButton: Bool) -> some View {
+        VStack(spacing: 0) {
             Spacer()
             TimerStripView(strip: environment.timers.strip) { open(.timers, audience: nil) }
-            if detailed {
+            if showsHomeButton {
                 Button {
                     navigator.showHomeScreen()
                 } label: {
@@ -258,7 +304,7 @@ public struct HubRootView: View {
                 .buttonStyle(.plain)
                 .hoverEffect(.highlight)
                 .accessibilityLabel("Show Home Screen")
-                .transition(.opacity)
+                .accessibilityIdentifier("hub.showHomeScreen")
             }
         }
         .padding(metrics.pt(3.5))
@@ -292,6 +338,57 @@ public struct HubRootView: View {
         navigator.open(app, context: context)
     }
 
+    /// Whether the device's own biometrics can confirm the member the camera matched.
+    private var isDeviceUnlockOffered: Bool {
+        // A UI test stands in for the biometric hardware, which the simulator does not have.
+        if hooks.offersDeviceUnlock {
+            return session.canConfirmWithDeviceBiometrics
+        }
+        return slots.deviceUnlock?.isOffered() ?? false
+    }
+
+    /// Runs the device's biometrics. When that unlocks personal content, opens the app the
+    /// person tapped, if there was one.
+    private func runDeviceUnlock(thenOpen app: HubApp?) {
+        Task {
+            let succeeded: Bool
+            if hooks.offersDeviceUnlock {
+                succeeded = session.confirmWithDeviceBiometrics()
+            } else if let deviceUnlock = slots.deviceUnlock {
+                succeeded = await deviceUnlock.unlock()
+            } else {
+                succeeded = false
+            }
+            let context = AudienceContext(
+                isGuest: session.isGuest,
+                isPersonalContentUnlocked: session.isPersonalContentUnlocked,
+                setupMode: currentPreferences.setupMode
+            )
+            if let app = VisibilityPolicy.appToOpen(afterUnlock: succeeded, requested: app, context: context) {
+                navigator.open(app, context: context)
+            }
+        }
+    }
+
+    /// Puts the hub in the state a UI test asked for. Does nothing unless a test set a hook.
+    private func applyTestHooks() {
+        guard let audience = hooks.audience ?? (hooks.proximity == nil ? nil : .guest) else { return }
+        let proximity = hooks.proximity ?? .near
+        session.unknownFacePresent(proximity: proximity)
+        guard let profile = session.profiles.first else { return }
+        switch audience {
+        case .guest:
+            break
+        case .manual:
+            try? session.switchManually(to: profile.id)
+        case .recognized:
+            session.faceRecognized(profileID: profile.id, proximity: proximity)
+        }
+        if hooks.offersDeviceUnlock {
+            session.faceMatchedWithoutLiveness(profileID: profile.id, proximity: proximity)
+        }
+    }
+
     private func keyStep(_ step: Int, _ preferences: HubPreferences) -> KeyPress.Result {
         guard navigator.state.surface == .faces else { return .ignored }
         model.touch()
@@ -314,8 +411,8 @@ public struct HubRootView: View {
     /// and telling companions what is showing.
     private func housekeeping() {
         let now = Date()
-        let preferences = HubPreferences(settings: settings)
-        model.updateNight(schedule: preferences.night, ambient: ambientLight?(), now: now, calendar: calendar)
+        let preferences = currentPreferences
+        model.updateNight(schedule: preferences.night, ambient: ambientLight?(), now: now, calendar: calendar, forced: hooks.forcesNight)
         navigator.restIfIdle(isSomeonePresent: session.isSomeonePresent, idleSeconds: now.timeIntervalSince(model.lastInteraction))
         guard let onSummaryChange, let face = model.face else { return }
         var night = false
@@ -341,6 +438,7 @@ struct FacePagerView: View {
     @Binding var selection: FaceKind?
     let facePosition: (@MainActor () -> FacePosition?)?
     @Environment(\.hubMetrics) private var metrics
+    @Environment(\.hubMayPrompt) private var mayPrompt
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -350,6 +448,9 @@ struct FacePagerView: View {
                         .frame(width: metrics.side, height: metrics.side)
                         .clipped()
                         .id(kind)
+                        // Neighboring faces are built ahead of time. Only the one in front may
+                        // start a service that asks for permission.
+                        .environment(\.hubMayPrompt, mayPrompt && selection == kind)
                         .accessibilityLabel(kind.title)
                 }
             }
@@ -358,7 +459,17 @@ struct FacePagerView: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $selection)
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("hub.faces")
         .accessibilityHint("Swipe left or right to change the face. Swipe up for the Home Screen.")
+        .overlay(alignment: .topLeading) {
+            // Says which face is in front, for assistive technology and for UI tests.
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement()
+                .accessibilityLabel("Current face")
+                .accessibilityValue(selection.map { Text($0.title) } ?? Text(verbatim: ""))
+                .accessibilityIdentifier("hub.currentFace")
+        }
     }
 }
 

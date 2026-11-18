@@ -110,8 +110,16 @@ public struct CanvasLayout: Equatable, Sendable {
     /// The second column is only worth showing when it is at least this fraction of the square.
     public static let minimumSideFraction = 0.28
 
+    /// The profile status needs at least this fraction of the square beside or above it.
+    public static let minimumStatusFraction = 0.09
+    /// Share of the second column given to the profile status.
+    public static let statusStripFraction = 0.13
+
     public let square: CanvasFrame
     public let side: CanvasFrame?
+    /// Where the active profile and the recognition status go: in the black around the square,
+    /// never on top of it. Nil when the square fills the space.
+    public let status: CanvasFrame?
 
     public init(width: Double, height: Double, mode: CanvasMode, margin: Double = 0, gap: Double = 0) {
         let availableWidth = max(0, width - 2 * margin)
@@ -119,20 +127,35 @@ public struct CanvasLayout: Equatable, Sendable {
         let edge = min(availableWidth, availableHeight)
         let leftoverWidth = availableWidth - edge - gap
         let leftoverHeight = availableHeight - edge - gap
+        let strip = edge * Self.statusStripFraction
         if mode == .fill, leftoverWidth >= edge * Self.minimumSideFraction {
+            let x = margin + edge + gap
             square = CanvasFrame(x: margin, y: margin + (availableHeight - edge) / 2, width: edge, height: edge)
-            side = CanvasFrame(x: margin + edge + gap, y: margin, width: leftoverWidth, height: availableHeight)
+            status = CanvasFrame(x: x, y: margin, width: leftoverWidth, height: strip)
+            side = CanvasFrame(x: x, y: margin + strip, width: leftoverWidth, height: availableHeight - strip)
         } else if mode == .fill, leftoverHeight >= edge * Self.minimumSideFraction {
+            let y = margin + edge + gap
             square = CanvasFrame(x: margin + (availableWidth - edge) / 2, y: margin, width: edge, height: edge)
-            side = CanvasFrame(x: margin, y: margin + edge + gap, width: availableWidth, height: leftoverHeight)
+            status = CanvasFrame(x: margin + availableWidth - strip, y: y, width: strip, height: leftoverHeight)
+            side = CanvasFrame(x: margin, y: y, width: availableWidth - strip, height: leftoverHeight)
         } else {
-            square = CanvasFrame(
+            let frame = CanvasFrame(
                 x: margin + (availableWidth - edge) / 2,
                 y: margin + (availableHeight - edge) / 2,
                 width: edge,
                 height: edge
             )
+            let beside = (availableWidth - edge) / 2
+            let above = (availableHeight - edge) / 2
+            square = frame
             side = nil
+            if edge > 0, beside >= edge * Self.minimumStatusFraction {
+                status = CanvasFrame(x: frame.x + edge, y: frame.y, width: beside, height: edge)
+            } else if edge > 0, above >= edge * Self.minimumStatusFraction {
+                status = CanvasFrame(x: frame.x, y: margin, width: edge, height: above)
+            } else {
+                status = nil
+            }
         }
     }
 }

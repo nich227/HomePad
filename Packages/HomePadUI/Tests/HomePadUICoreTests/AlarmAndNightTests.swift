@@ -23,6 +23,29 @@ import Testing
         #expect(throws: AlarmError.limitReached(AlarmBook.limit)) { try book.add(hour: 1, minute: 1) }
     }
 
+    @Test func alarmTimeDraft_whenCreated_thenStartsOnTheNextFiveMinuteStep() {
+        let exact = AlarmTimeDraft(hour: 7, minute: 0)
+        #expect(exact.hour == 7 && exact.minute == 0)
+        let rounded = AlarmTimeDraft(hour: 7, minute: 31)
+        #expect(rounded.hour == 7 && rounded.minute == 35)
+        let nextHour = AlarmTimeDraft(hour: 9, minute: 58)
+        #expect(nextHour.hour == 10 && nextHour.minute == 0)
+        let nextDay = AlarmTimeDraft(hour: 23, minute: 57)
+        #expect(nextDay.hour == 0 && nextDay.minute == 0)
+    }
+
+    @Test func alarmTimeDraft_whenStepped_thenHourAndMinuteWrapOnTheirOwn() {
+        var draft = AlarmTimeDraft(hour: 23, minute: 55)
+        draft.stepHour(by: 1)
+        #expect(draft.hour == 0)
+        draft.stepHour(by: -1)
+        #expect(draft.hour == 23)
+        draft.stepMinute(by: 1)
+        #expect(draft.hour == 23 && draft.minute == 0)
+        draft.stepMinute(by: -1)
+        #expect(draft.hour == 23 && draft.minute == 55)
+    }
+
     @Test func editing_whenAlarmUnknown_thenThrows() {
         var book = AlarmBook()
         let missing = UUID()

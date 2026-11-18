@@ -2,23 +2,31 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
-/// How a home tile is drawn: glass over a wallpaper on faces, flat fills in the Home app.
+/// How a home tile is drawn: glass over a wallpaper on faces, solid fills in the Home app.
 enum HomeTileStyle {
     case glass
-    case light
+    case solid
 }
 
-/// One small square tile: an icon, a name, and where it is. Tapping acts on it.
+/// One small square tile: an icon, a name, and where it is. Tapping acts on it. A lit tile
+/// means the accessory is on.
 struct HomeTileView: View {
     let tile: HomeTile
     let style: HomeTileStyle
     var showsSubtitle = true
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubAudience) private var audience
+    @Environment(\.hubMayRunScenes) private var mayRunScenes
     @Environment(HubEnvironment.self) private var environment
 
     private var isActive: Bool {
         if case .accessory(let accessory) = tile { return accessory.isOn && accessory.kind != .lock }
+        return false
+    }
+
+    /// A scene someone unrecognized is looking at: shown, but it will not run.
+    private var isLockedScene: Bool {
+        if case .scene = tile { return !mayRunScenes }
         return false
     }
 
@@ -28,7 +36,7 @@ struct HomeTileView: View {
             let symbol = accessory.kind == .lock ? (accessory.isOn ? "lock.fill" : "lock.open.fill") : accessory.kind.symbolName
             return (symbol, accessory.name, accessory.roomName)
         case .scene(let scene):
-            return (scene.symbolName, scene.name, String(localized: "Scene"))
+            return (scene.symbolName, scene.name, isLockedScene ? String(localized: "Members only") : String(localized: "Scene"))
         case .camera(let camera):
             return ("video.fill", camera.name, camera.roomName)
         }
@@ -50,20 +58,31 @@ struct HomeTileView: View {
         .buttonStyle(.plain)
         .modifier(HomeTileBackground(style: style, isActive: isActive, shape: shape))
         .clipShape(shape)
+        .overlay(alignment: .topTrailing) {
+            if isLockedScene {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: metrics.pt(2.6), weight: .bold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(metrics.pt(2.2))
+                    .accessibilityHidden(true)
+            }
+        }
         .hoverEffect(.highlight)
         .accessibilityLabel(Text(verbatim: "\(content.title), \(content.subtitle)"))
+        .accessibilityHint(isLockedScene ? Text("Scenes run only for household members the hub recognizes.") : Text(verbatim: ""))
         .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 
     private var label: some View {
         let info = content
-        let tint = Color(RainbowTint.purple)
-        let primary: Color = style == .glass ? .white : (isActive ? tint : Color(white: 0.3))
+        let lit = isActive && style == .solid
+        let primary: Color = lit ? Color(white: 0.1) : .white
+        let icon: Color = lit ? Color(RainbowTint.orange) : .white
         return VStack(spacing: metrics.pt(0.6)) {
             Image(systemName: info.symbol)
                 .font(.system(size: metrics.pt(7.5)))
                 .frame(height: metrics.pt(11))
-                .foregroundStyle(primary.opacity(style == .glass && !isActive ? 0.92 : 1))
+                .foregroundStyle(icon)
             Text(info.title)
                 .font(.system(size: metrics.text(2.9), weight: .semibold))
                 .foregroundStyle(primary)
@@ -76,6 +95,7 @@ struct HomeTileView: View {
         .lineLimit(1)
         .minimumScaleFactor(0.7)
         .padding(.horizontal, metrics.pt(1.5))
+        .opacity(isLockedScene ? 0.45 : 1)
     }
 
     private func activate() {
@@ -84,6 +104,7 @@ struct HomeTileView: View {
             guard HomeControlPolicy.mayOperate(accessory, turningOn: !accessory.isOn, isGuest: audience.isGuest) else { return }
             Task { await environment.home.setPower(!accessory.isOn, accessoryID: accessory.id) }
         case .scene(let scene):
+            guard mayRunScenes else { return }
             Task { await environment.home.runScene(id: scene.id) }
         case .camera:
             break
@@ -100,8 +121,8 @@ private struct HomeTileBackground<S: Shape>: ViewModifier {
         switch style {
         case .glass:
             content.hubGlass(in: shape, tint: isActive ? Color.white.opacity(0.18) : nil, interactive: true)
-        case .light:
-            content.background(shape.fill(isActive ? Color(RainbowTint.purple).opacity(0.28) : Color(white: 0.9)))
+        case .solid:
+            content.background(shape.fill(isActive ? Color(white: 0.93) : Color.hubTileFill))
         }
     }
 }
@@ -116,50 +137,49 @@ struct ThermostatTile: View {
     @Environment(HubEnvironment.self) private var environment
 
     var body: some View {
-        let ink: Color = style == .glass ? .white : Color(white: 0.2)
         let shape = RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous)
         VStack(spacing: 0) {
             Spacer(minLength: 0)
             Text(verbatim: "\(units.temperature.rounded(fromCelsius: thermostat.targetCelsius))")
                 .font(.system(size: metrics.pt(numberSize), weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(ink)
+                .foregroundStyle(.white)
                 .contentTransition(.numericText())
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
             Spacer(minLength: 0)
             HStack(alignment: .center) {
-                step(-1, symbol: "chevron.down", label: "Lower Temperature", ink: ink)
+                step(-1, symbol: "chevron.down", label: "Lower Temperature")
                 Spacer(minLength: 0)
                 VStack(spacing: metrics.pt(0.3)) {
                     Text(thermostat.name)
                         .font(.system(size: metrics.text(2.9), weight: .bold))
-                        .foregroundStyle(ink)
+                        .foregroundStyle(.white)
                     Text(verbatim: "\(thermostat.roomName) \u{00B7} \(units.degrees(thermostat.currentCelsius))")
                         .font(.system(size: metrics.text(2.7)))
-                        .foregroundStyle(ink.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.7))
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
-                step(1, symbol: "chevron.up", label: "Raise Temperature", ink: ink)
+                step(1, symbol: "chevron.up", label: "Raise Temperature")
             }
             .padding(.horizontal, metrics.pt(3))
-            .padding(.bottom, metrics.pt(4))
+            .padding(.bottom, metrics.pt(numberSize > 20 ? 4 : 1.5))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .modifier(HomeTileBackground(style: style, isActive: false, shape: shape))
         .accessibilityElement(children: .contain)
     }
 
-    private func step(_ direction: Int, symbol: String, label: LocalizedStringKey, ink: Color) -> some View {
+    private func step(_ direction: Int, symbol: String, label: LocalizedStringKey) -> some View {
         Button {
             let target = ThermostatMath.stepped(targetCelsius: thermostat.targetCelsius, direction: direction, unit: units.temperature)
             Task { await environment.home.setTargetTemperature(celsius: target, thermostatID: thermostat.id) }
         } label: {
             Image(systemName: symbol)
                 .font(.system(size: metrics.pt(4.4), weight: .semibold))
-                .foregroundStyle(ink)
+                .foregroundStyle(.white)
                 .frame(width: metrics.pt(9), height: metrics.pt(9))
                 .contentShape(Rectangle())
         }
@@ -231,7 +251,7 @@ struct HomeModularFace: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { home.start() }
+        .startsOnFirstUse { home.start() }
     }
 
     @ViewBuilder
@@ -309,7 +329,7 @@ struct HomeCameraFace: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { home.start() }
+        .startsOnFirstUse { home.start() }
     }
 
     @ViewBuilder

@@ -22,6 +22,7 @@ final class HubModel {
     @ObservationIgnored private var wakeUntil: Date?
     @ObservationIgnored private(set) var lastInteraction = Date()
     @ObservationIgnored private var lastSummary: HubStatusSummary?
+    @ObservationIgnored private var welcomeFinished = false
 
     init(layoutStore: any LayoutStore) {
         self.layoutStore = layoutStore
@@ -65,8 +66,18 @@ final class HubModel {
         wakeUntil = NightModePolicy.wakeDeadline(from: date)
     }
 
-    func updateNight(schedule: NightSchedule, ambient: AmbientLightHint?, now: Date, calendar: Calendar) {
-        let appearance = NightModePolicy.appearance(schedule: schedule, now: now, calendar: calendar, ambient: ambient, wakeUntil: wakeUntil)
+    /// Returns true the first time it is called, so the owner is told exactly once.
+    func markWelcomeFinished() -> Bool {
+        guard !welcomeFinished else { return false }
+        welcomeFinished = true
+        return true
+    }
+
+    /// `forced` shows the night clock regardless of the schedule. Only UI tests set it.
+    func updateNight(schedule: NightSchedule, ambient: AmbientLightHint?, now: Date, calendar: Calendar, forced: Bool = false) {
+        let appearance: NightAppearance = forced
+            ? .night(brightness: NightModePolicy.dimBrightness)
+            : NightModePolicy.appearance(schedule: schedule, now: now, calendar: calendar, ambient: ambient, wakeUntil: wakeUntil)
         if appearance != night {
             night = appearance
         }

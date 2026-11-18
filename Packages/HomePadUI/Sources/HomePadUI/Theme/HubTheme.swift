@@ -46,6 +46,35 @@ extension EnvironmentValues {
     @Entry var hubUnits = HubUnits()
     @Entry var faceDensity: FaceDensity = .detailed
     @Entry var hubAudience = AudienceContext(isGuest: true, isPersonalContentUnlocked: false, setupMode: true)
+    /// False while a system permission prompt would land on top of something else, such as the
+    /// welcome screen, or while the view asking is not the one in front.
+    @Entry var hubMayPrompt = true
+    /// Whether the person in front of the hub may run home scenes.
+    @Entry var hubMayRunScenes = false
+    /// True while a personalized but locked member can unlock with the device's biometrics.
+    @Entry var hubShowsDeviceUnlock = false
+}
+
+/// Starts a service the first time its view is really in use. Starting is what makes the system
+/// ask for permission, so it waits until a prompt would make sense to the person.
+private struct FirstUseModifier: ViewModifier {
+    let isInUse: Bool
+    let start: @MainActor () -> Void
+    @Environment(\.hubMayPrompt) private var mayPrompt
+
+    func body(content: Content) -> some View {
+        content.task(id: mayPrompt && isInUse) {
+            if mayPrompt && isInUse {
+                start()
+            }
+        }
+    }
+}
+
+extension View {
+    func startsOnFirstUse(when isInUse: Bool = true, _ start: @escaping @MainActor () -> Void) -> some View {
+        modifier(FirstUseModifier(isInUse: isInUse, start: start))
+    }
 }
 
 extension DynamicTypeSize {
@@ -113,6 +142,7 @@ struct GlassCircleButton: View {
     let symbol: String
     let label: LocalizedStringKey
     var size: CGFloat = 9
+    var identifier = ""
     let action: () -> Void
     @Environment(\.hubMetrics) private var metrics
 
@@ -128,6 +158,7 @@ struct GlassCircleButton: View {
         .hubGlass(in: Circle(), interactive: true)
         .hoverEffect(.highlight)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -136,6 +167,7 @@ struct GlassCapsuleButton: View {
     let title: LocalizedStringKey
     let symbol: String
     var tint: Color?
+    var identifier = ""
     let action: () -> Void
     @Environment(\.hubMetrics) private var metrics
 
@@ -153,6 +185,45 @@ struct GlassCapsuleButton: View {
         .buttonStyle(.plain)
         .hubGlass(in: Capsule(), tint: tint, interactive: true)
         .hoverEffect(.highlight)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// A full-canvas message for when an app has nothing to show: a large symbol, a title, a line
+/// of explanation, and room for one action.
+struct HubEmptyState<Actions: View>: View {
+    let symbol: String
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+    var tint: Color = .white
+    @ViewBuilder let actions: Actions
+    @Environment(\.hubMetrics) private var metrics
+
+    var body: some View {
+        VStack(spacing: metrics.pt(2.4)) {
+            Image(systemName: symbol)
+                .font(.system(size: metrics.pt(20), weight: .medium))
+                .foregroundStyle(tint)
+                .frame(height: metrics.pt(26))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.system(size: metrics.text(6), weight: .bold))
+                .foregroundStyle(.white)
+            Text(message)
+                .font(.system(size: metrics.text(3.6), weight: .medium))
+                .foregroundStyle(Color.hubSecondaryText)
+            actions
+                .padding(.top, metrics.pt(2))
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, metrics.pt(9))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension HubEmptyState where Actions == EmptyView {
+    init(symbol: String, title: LocalizedStringKey, message: LocalizedStringKey, tint: Color = .white) {
+        self.init(symbol: symbol, title: title, message: message, tint: tint) { EmptyView() }
     }
 }
 
@@ -168,6 +239,21 @@ struct OpenSettingsButton: View {
         } label: {
             Label("Open Settings", systemImage: "gearshape.fill")
         }
+    }
+}
+
+/// "Open Settings" at the hub's size: a wide glass capsule, like the other actions on the canvas.
+struct HubSettingsButton: View {
+    @Environment(\.openURL) private var openURL
+    @Environment(\.hubMetrics) private var metrics
+
+    var body: some View {
+        GlassCapsuleButton(title: "Open Settings", symbol: "gearshape.fill", identifier: "hub.openSettings") {
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                openURL(url)
+            }
+        }
+        .frame(width: metrics.pt(46))
     }
 }
 

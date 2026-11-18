@@ -23,18 +23,49 @@ struct AppHostView: View {
             case .weather: WeatherApp(onClose: onClose)
             case .photos: PhotosApp(onClose: onClose)
             case .beam, .messages, .projectedApps, .people, .pairing, .settings:
-                ZStack(alignment: .topLeading) {
-                    Color.black
-                    (slots.view(for: app) ?? AnyView(EmptyView()))
-                        .padding(.top, metrics.pt(13))
-                    GlassCircleButton(symbol: "xmark", label: "Close", action: onClose)
-                        .padding(metrics.pt(4))
+                SlotScreen(app: app, onClose: onClose) {
+                    slots.view(for: app) ?? AnyView(EmptyView())
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black)
     }
+}
+
+/// Hosts a view from another package as an app. Those views are built from ordinary lists and
+/// text styles sized for a screen in the hand, so the text is stepped up to suit the canvas,
+/// and the list background is cleared so the app sits on black like the native ones.
+struct SlotScreen<Content: View>: View {
+    let app: HubApp
+    let onClose: () -> Void
+    @ViewBuilder let content: Content
+    @Environment(\.hubMetrics) private var metrics
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var contentTypeSize: DynamicTypeSize {
+        let steps = SlotTypeSizes.steps
+        let step = SlotTextScale.step(forCanvasSide: Double(metrics.side))
+        return max(dynamicTypeSize, steps[min(step, steps.count - 1)])
+    }
+
+    var body: some View {
+        AppScreen(title: app.title, onClose: onClose) {
+            content
+                .dynamicTypeSize(contentTypeSize)
+                .scrollContentBackground(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
+        }
+    }
+}
+
+/// The Dynamic Type sizes from Large up, in the order `SlotTextScale` counts them.
+enum SlotTypeSizes {
+    static let steps: [DynamicTypeSize] = [
+        .large, .xLarge, .xxLarge, .xxxLarge,
+        .accessibility1, .accessibility2, .accessibility3, .accessibility4, .accessibility5,
+    ]
 }
 
 /// Common frame for native apps: a round close button, a title, and the content below.
@@ -49,7 +80,7 @@ struct AppScreen<Content: View>: View {
     var body: some View {
         VStack(spacing: metrics.pt(2)) {
             HStack(spacing: metrics.pt(3)) {
-                GlassCircleButton(symbol: "xmark", label: "Close", action: onClose)
+                GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
                 Text(title)
                     .font(.system(size: metrics.text(4.6), weight: .bold))
                     .foregroundStyle(ink)
@@ -111,28 +142,25 @@ struct WeatherApp: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            TimelineView(.periodic(from: .startOfCurrentSecond, by: 30)) { timeline in
-                WeatherFace(date: timeline.date)
-                    .environment(\.faceDensity, .detailed)
-                    .padding(.top, metrics.pt(11))
-                    .background(Color(red: 0.62, green: 0.76, blue: 0.9))
-            }
-            if environment.weather.error == .notConfigured {
-                VStack(spacing: metrics.pt(3)) {
-                    Text("To show weather, enter the hub's city and coordinates in Settings.")
-                        .font(.system(size: metrics.text(3.4), weight: .semibold))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                    OpenSettingsButton()
-                        .font(.system(size: metrics.text(3.2), weight: .semibold))
-                        .buttonStyle(.glassProminent)
+            if environment.weather.snapshot == nil {
+                WeatherSky()
+                HubEmptyState(
+                    symbol: "cloud.sun.fill",
+                    title: "Weather Is Not Set Up",
+                    message: "Enter the hub's city and coordinates in Settings to see the weather here and on your faces."
+                ) {
+                    HubSettingsButton()
                 }
-                .padding(metrics.pt(5))
-                .frame(maxWidth: metrics.pt(70))
-                .hubTile(metrics, tint: Color.black.opacity(0.35))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .symbolRenderingMode(.multicolor)
+            } else {
+                TimelineView(.periodic(from: .startOfCurrentSecond, by: 30)) { timeline in
+                    WeatherFace(date: timeline.date)
+                        .environment(\.faceDensity, .detailed)
+                        .padding(.top, metrics.pt(11))
+                        .background(WeatherSky())
+                }
             }
-            GlassCircleButton(symbol: "xmark", label: "Close", action: onClose)
+            GlassCircleButton(symbol: "xmark", label: "Close", identifier: "hub.close", action: onClose)
                 .padding(metrics.pt(4))
         }
     }

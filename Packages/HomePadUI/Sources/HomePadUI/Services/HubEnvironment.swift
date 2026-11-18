@@ -44,10 +44,15 @@ public final class HubEnvironment {
     /// Real services, with state under `Application Support/HomePad/UI`. Falls back to memory
     /// when that directory cannot be resolved, so the hub still starts.
     public static func live() -> HubEnvironment {
-        let base = try? FileManager.default
+        let hooks = HubTestHooks.current
+        if hooks.usesSampleData {
+            return preview(runningTimer: false, recipePage: SampleContent.recipePage)
+        }
+        let stored = try? FileManager.default
             .url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("HomePad", isDirectory: true)
             .appendingPathComponent("UI", isDirectory: true)
+        let base = hooks.isEphemeral ? nil : stored
         func store(_ name: String) -> any SnapshotStore {
             guard let base else { return InMemorySnapshotStore() }
             return FileSnapshotStore(url: base.appendingPathComponent(name))
@@ -68,7 +73,7 @@ public final class HubEnvironment {
     }
 
     /// In-memory services with sample content. Touches no hardware, files, or network.
-    public static func preview(runningTimer: Bool = true) -> HubEnvironment {
+    public static func preview(runningTimer: Bool = true, recipePage: String? = nil) -> HubEnvironment {
         let timers = TimerCenter()
         if runningTimer {
             timers.add(name: String(localized: "Pasta"), duration: 15 * 60)
@@ -95,9 +100,59 @@ public final class HubEnvironment {
             camera: PreviewCameraService(),
             weather: weather,
             photos: FacePhotoLibrary(directory: nil),
-            recipes: RecipeLibrary(loader: FixedRecipePageLoader(html: nil))
+            recipes: RecipeLibrary(loader: FixedRecipePageLoader(html: recipePage))
         )
     }
+}
+
+extension HubTestHooks {
+    /// The switches for this launch. Read once, and only in debug builds.
+    public static let current: HubTestHooks = {
+        #if DEBUG
+        return HubTestHooks(environment: ProcessInfo.processInfo.environment)
+        #else
+        return .none
+        #endif
+    }()
+
+    /// The household the UI tests run against, kept in memory. Nil means use the real store.
+    public var sampleProfileStore: (any ProfileStore)? {
+        guard usesSampleData else { return nil }
+        return InMemoryProfileStore(profiles: [
+            HouseholdProfile(name: "Erica", tint: .purple),
+            HouseholdProfile(name: "Danny", tint: .blue),
+        ])
+    }
+}
+
+/// Made-up content for previews and UI tests.
+enum SampleContent {
+    static var hubSummary: HubStatusSummary {
+        let now = Date()
+        return HubStatusSummary(
+            surface: .app(.recipes),
+            face: .flow,
+            profileName: "Erica",
+            timers: [HubTimer(name: "Pasta", duration: 900, state: .running(endsAt: now.addingTimeInterval(540)), createdAt: now)],
+            nowPlaying: NowPlaying(title: "Morning Light", artist: "The Placeholders", isPlaying: true),
+            isNight: false,
+            at: now
+        )
+    }
+
+    static let recipePage = """
+    <html><head><script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Recipe","name":"Butternut Squash Soup",
+     "author":{"@type":"Organization","name":"Home Cookbook"},"recipeYield":"Serves 4",
+     "prepTime":"PT10M","cookTime":"PT25M","totalTime":"PT35M",
+     "recipeIngredient":["1 butternut squash, peeled and cubed","1 yellow onion, chopped","2 cloves garlic","4 cups vegetable stock","2 tablespoons olive oil","Fresh sage leaves","Salt and pepper"],
+     "recipeInstructions":[
+       {"@type":"HowToStep","text":"Heat the oil in a large pot. Cook the onion and garlic until soft, about 5 minutes."},
+       {"@type":"HowToStep","text":"Add the squash and the stock. Bring to a boil, then simmer for 20 minutes until the squash is tender."},
+       {"@type":"HowToStep","text":"Blend until smooth. Season with salt and pepper."},
+       {"@type":"HowToStep","text":"Fry the sage leaves for 30 seconds and scatter them over each bowl."}]}
+    </script></head><body></body></html>
+    """
 }
 
 /// The system ends an app that asks for a protected resource without its usage description in

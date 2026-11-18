@@ -2,6 +2,27 @@ import HomePadCore
 import HomePadUICore
 import SwiftUI
 
+/// One very tall digit as a filled outline, so it can be drawn translucent in a single pass.
+struct TallDigitShape: Shape {
+    let digit: Int
+    let lineWidth: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let box = rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+        guard box.width > 0, box.height > 0 else { return Path() }
+        var centerlines = Path()
+        for stroke in TallDigits.strokes(for: digit, aspect: Double(box.height / box.width)) {
+            centerlines.addLines(stroke.points.map { point in
+                CGPoint(x: box.minX + CGFloat(point.x) * box.width, y: box.minY + CGFloat(point.y) * box.width)
+            })
+            if stroke.isClosed {
+                centerlines.closeSubpath()
+            }
+        }
+        return centerlines.strokedPath(StrokeStyle(lineWidth: lineWidth, lineCap: .butt, lineJoin: .round))
+    }
+}
+
 /// A photo with the time in very tall translucent digits. With the depth layout the digits sit
 /// behind the photo's subject, which is cut out and drawn again on top.
 struct PhotosFace: View {
@@ -12,6 +33,7 @@ struct PhotosFace: View {
     @Environment(\.hubPreferences) private var preferences
     @Environment(\.calendar) private var calendar
     @Environment(\.locale) private var locale
+    @Environment(\.hubMayPrompt) private var mayPrompt
     @Environment(HubEnvironment.self) private var environment
     @Environment(HouseholdSession.self) private var session
 
@@ -49,8 +71,8 @@ struct PhotosFace: View {
                 environment.photos.prepareSubject(for: current)
             }
         }
-        .task(id: "\(options.photosSource.rawValue)|\(options.photosAlbumName)") {
-            if options.photosSource == .sharedAlbum {
+        .task(id: "\(options.photosSource.rawValue)|\(options.photosAlbumName)|\(mayPrompt)") {
+            if options.photosSource == .sharedAlbum, mayPrompt {
                 await environment.photos.loadSharedAlbum(named: options.photosAlbumName)
             }
         }
@@ -94,27 +116,28 @@ struct PhotosFace: View {
     private var tallDigits: some View {
         let columns = TimeTextPolicy.digitColumns(for: ClockReading(date: date, calendar: calendar), hourCycle: units.hourCycle)
         let hidesLeadingZero = units.hourCycle == .twelve && columns[0] == 0
-        return HStack(spacing: 0) {
+        return HStack(spacing: metrics.pt(3.4)) {
             digit(columns[0]).opacity(hidesLeadingZero ? 0 : 1)
             digit(columns[1])
             Spacer(minLength: metrics.pt(4))
             digit(columns[2])
             digit(columns[3])
         }
-        .padding(.horizontal, metrics.pt(4))
+        .padding(.horizontal, metrics.pt(5.5))
         .accessibilityElement()
         .accessibilityLabel(Text(date, style: .time))
     }
 
     private func digit(_ value: Int) -> some View {
-        Text(verbatim: "\(value)")
-            .font(.system(size: metrics.pt(54), weight: .semibold).width(.compressed))
-            .foregroundStyle(.white.opacity(0.34))
-            .shadow(color: .white.opacity(0.45), radius: metrics.pt(0.25))
-            .fixedSize()
-            .frame(width: metrics.pt(21))
-            .scaleEffect(x: 1, y: 2.25)
-            .contentTransition(.numericText())
+        let shape = TallDigitShape(digit: value, lineWidth: metrics.pt(5))
+        // Filled as one shape and flattened before the glow, so strokes that cross do not show.
+        return shape
+            .fill(.white)
+            .compositingGroup()
+            .opacity(0.36)
+            .shadow(color: .white.opacity(0.55), radius: metrics.pt(0.3))
+            .frame(width: metrics.pt(16.4), height: metrics.pt(89))
+            .animation(.smooth(duration: 0.4), value: value)
     }
 
     private var cornerTime: some View {

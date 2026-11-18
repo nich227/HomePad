@@ -185,6 +185,14 @@ import Testing
         #expect(home.column == 3 && home.row == 0)
     }
 
+    @Test func pack_whenWidgetFollowsOneIcon_thenWidgetKeepsToAnEdge() {
+        let result = HomeGridPacker.pack([.app(.beam), .widget(.weather), .app(.home), .app(.music)], columns: 4)
+        let positions = Dictionary(uniqueKeysWithValues: result.placements.map { ($0.id, $0.column * 10 + $0.row) })
+        #expect(positions["widget.weather"] == 20)
+        #expect(positions["app.home"] == 10)
+        #expect(positions["app.music"] == 1)
+    }
+
     @Test func pack_whenColumnsTooFew_thenUsesAtLeastTwo() {
         let result = HomeGridPacker.pack([.widget(.weather), .app(.clock)], columns: 1)
         #expect(result.placements[0].span == 2)

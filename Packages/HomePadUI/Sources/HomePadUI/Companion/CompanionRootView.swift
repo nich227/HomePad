@@ -28,7 +28,8 @@ public struct CompanionRootView: View {
         self.session = session
         self.settings = settings
         self.slots = slots
-        self.hubSummary = hubSummary
+        // A UI test may ask for a sample summary, since no hub is running beside it.
+        self.hubSummary = hubSummary ?? (HubTestHooks.current.usesSampleData ? SampleContent.hubSummary : nil)
     }
 
     public var body: some View {
@@ -46,7 +47,10 @@ public struct CompanionRootView: View {
                 }
             }
             SwiftUI.Tab("Beam", systemImage: "dot.radiowaves.left.and.right", value: Tab.beam) {
-                slots.beam()
+                // The beam view sets a title and expects a navigation stack around it.
+                NavigationStack {
+                    slots.beam()
+                }
             }
             SwiftUI.Tab("Apps", systemImage: "square.grid.2x2.fill", value: Tab.apps) {
                 slots.projectedApps()
@@ -118,9 +122,14 @@ struct HubSummaryView: View {
                 }
             } else {
                 ContentUnavailableView {
-                    VStack {
+                    VStack(spacing: 20) {
+                        // The animation is drawn in white for the hub's black canvas, so it
+                        // sits on a small black square shaped like that canvas.
                         HomePadAnimationView(.pairing, loop: true)
-                            .frame(width: 140, height: 140)
+                            .frame(width: 120, height: 120)
+                            .padding(20)
+                            .background(RoundedRectangle(cornerRadius: 36, style: .continuous).fill(.black))
+                            .accessibilityHidden(true)
                         Text("Hub Not Reachable")
                     }
                 } description: {

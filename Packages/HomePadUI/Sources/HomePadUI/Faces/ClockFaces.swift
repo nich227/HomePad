@@ -177,10 +177,10 @@ struct DigitalFace: View {
                 .symbolRenderingMode(.multicolor)
                 .font(.system(size: metrics.text(5)))
             VStack(alignment: .leading, spacing: 0) {
-                Text(weather.map { units.degrees($0.temperatureCelsius) } ?? "--\u{00B0}")
-                    .font(.system(size: metrics.text(5), weight: .semibold))
+                Text(weather.map { units.degrees($0.temperatureCelsius) } ?? String(localized: "Weather"))
+                    .font(.system(size: metrics.text(weather == nil ? 3.4 : 5), weight: .semibold))
                     .foregroundStyle(.white)
-                Text(weather?.conditionText ?? String(localized: "No Weather"))
+                Text(weather?.conditionText ?? String(localized: "Not set up"))
                     .font(.system(size: metrics.text(2.6)))
                     .foregroundStyle(Color.hubSecondaryText)
             }

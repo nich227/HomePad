@@ -37,7 +37,8 @@ struct FlowFace: View {
 
     /// Rest positions of the four digit shapes: hours on top, minutes below.
     private static let digitRests = [FlowPoint(x: 0.3, y: 0.3), FlowPoint(x: 0.68, y: 0.3), FlowPoint(x: 0.32, y: 0.72), FlowPoint(x: 0.7, y: 0.72)]
-    private static let satelliteRests = [FlowPoint(x: 0.18, y: 0.52), FlowPoint(x: 0.5, y: 0.5), FlowPoint(x: 0.84, y: 0.48), FlowPoint(x: 0.5, y: 0.12), FlowPoint(x: 0.52, y: 0.9)]
+    /// Loose drops sit toward the edges. One between two digits reads as a decimal point.
+    private static let satelliteRests = [FlowPoint(x: 0.1, y: 0.52), FlowPoint(x: 0.9, y: 0.5), FlowPoint(x: 0.5, y: 0.07), FlowPoint(x: 0.92, y: 0.9)]
 
     var body: some View {
         let target = preferences.faces.flowReactsToPresence ? facePosition : nil

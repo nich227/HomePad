@@ -7,16 +7,21 @@ import SwiftUI
 struct HomeWidgetView: View {
     let kind: HubWidgetKind
     let isRedacted: Bool
+    /// The widget is locked, and tapping it asks for the device's biometrics.
+    var offersUnlock = false
     let action: () -> Void
     @Environment(\.hubMetrics) private var metrics
+    @State private var isOnScreen = false
 
     var body: some View {
         Button(action: action) {
             Group {
-                if isRedacted {
+                if isRedacted, offersUnlock {
+                    unlockPrompt
+                } else if isRedacted {
                     redacted
                 } else {
-                    WidgetContent(kind: kind)
+                    WidgetContent(kind: kind, isInUse: isOnScreen)
                 }
             }
             .padding(metrics.pt(3.4))
@@ -24,11 +29,36 @@ struct HomeWidgetView: View {
             .contentShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
         }
         .buttonStyle(.plain)
-        .disabled(isRedacted)
+        .disabled(isRedacted && !offersUnlock)
         .hubTile(metrics, tint: Color.black.opacity(0.35))
         .clipShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
         .hoverEffect(.highlight)
         .padding(.bottom, metrics.text(2))
+        .onScrollVisibilityChange(threshold: 0.4) { isOnScreen = $0 }
+        .accessibilityIdentifier("widget.\(kind.rawValue)")
+    }
+
+    /// A locked personal widget while Touch ID is offered: the whole tile is the button.
+    private var unlockPrompt: some View {
+        VStack(spacing: metrics.pt(1.6)) {
+            Label(kind.title, systemImage: "lock.fill")
+                .font(.system(size: metrics.text(2.8), weight: .semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: 0)
+            Image(systemName: "touchid")
+                .font(.system(size: metrics.pt(13), weight: .regular))
+                .foregroundStyle(Color(RainbowTint.red))
+            Text("Unlock with Touch ID")
+                .font(.system(size: metrics.text(3.1), weight: .semibold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+            Spacer(minLength: 0)
+        }
+        .lineLimit(2)
+        .minimumScaleFactor(0.8)
+        .accessibilityElement(children: .combine)
     }
 
     private var redacted: some View {
@@ -67,6 +97,8 @@ extension HubWidgetKind {
 /// The inside of a widget. Also used by the second column in the fill layout.
 struct WidgetContent: View {
     let kind: HubWidgetKind
+    /// Whether the widget is in view. Its service starts, and may ask for access, only then.
+    var isInUse = true
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubUnits) private var units
     @Environment(\.calendar) private var calendar
@@ -137,9 +169,16 @@ struct WidgetContent: View {
         let snapshot = environment.weather.snapshot
         return VStack(alignment: .leading, spacing: metrics.pt(0.6)) {
             heading(snapshot.flatMap { $0.locationName.isEmpty ? nil : Text(verbatim: $0.locationName) } ?? Text("Weather"), symbol: snapshot?.symbolName ?? "cloud.fill")
-            Text(snapshot.map { units.degrees($0.temperatureCelsius) } ?? "--\u{00B0}")
-                .font(.system(size: metrics.pt(13), weight: .regular))
-                .foregroundStyle(.white)
+            if let snapshot {
+                Text(units.degrees(snapshot.temperatureCelsius))
+                    .font(.system(size: metrics.pt(13), weight: .regular))
+                    .foregroundStyle(.white)
+            } else {
+                Image(systemName: "cloud.sun.fill")
+                    .symbolRenderingMode(.multicolor)
+                    .font(.system(size: metrics.pt(11)))
+                    .padding(.top, metrics.pt(2))
+            }
             Spacer(minLength: 0)
             if let snapshot {
                 Text(snapshot.conditionText)
@@ -159,10 +198,13 @@ struct WidgetContent: View {
         return VStack(alignment: .leading, spacing: metrics.pt(1.4)) {
             heading("Timers", symbol: "timer")
             if strip.entries.isEmpty {
-                Spacer(minLength: 0)
-                Text("No Timers")
-                    .font(.system(size: metrics.text(3.4), weight: .semibold))
-                    .foregroundStyle(Color.hubSecondaryText)
+                TimerRingView(progress: 1, count: 28)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(
+                        Text("No Timers")
+                            .font(.system(size: metrics.text(3), weight: .semibold))
+                            .foregroundStyle(Color.hubSecondaryText)
+                    )
             } else {
                 TimelineView(.periodic(from: .startOfCurrentSecond, by: 1)) { _ in
                     VStack(alignment: .leading, spacing: metrics.pt(1)) {
@@ -228,6 +270,7 @@ struct WidgetContent: View {
                 .foregroundStyle(Color.hubSecondaryText)
         }
         .lineLimit(1)
+        .startsOnFirstUse(when: isInUse) { environment.music.start() }
     }
 
     private var home: some View {
@@ -250,7 +293,7 @@ struct WidgetContent: View {
             }
         }
         .lineLimit(1)
-        .onAppear { environment.home.start() }
+        .startsOnFirstUse(when: isInUse) { environment.home.start() }
         .accessibilityElement(children: .combine)
     }
 

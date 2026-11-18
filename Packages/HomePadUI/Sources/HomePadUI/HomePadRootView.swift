@@ -15,11 +15,14 @@ public struct HomePadRootView: View {
     private let ambientLight: (@MainActor () -> AmbientLightHint?)?
     private let hubSummary: HubStatusSummary?
     private let onHubSummaryChange: (@MainActor (HubStatusSummary) -> Void)?
+    private let onWelcomeFinished: (@MainActor () -> Void)?
     private let roleOverride: DeviceRole?
 
     /// - Parameters:
     ///   - hubSummary: Companion only. The latest summary received from the hub.
     ///   - onHubSummaryChange: Hub only. Called when what the hub shows changes.
+    ///   - onWelcomeFinished: Hub only. Called once when the first-run welcome is out of the
+    ///     way. Start face recognition here so the camera prompt does not cover the welcome.
     ///   - roleOverride: Forces a role regardless of device and settings, for previews.
     public init(
         session: HouseholdSession,
@@ -31,6 +34,7 @@ public struct HomePadRootView: View {
         ambientLight: (@MainActor () -> AmbientLightHint?)? = nil,
         hubSummary: HubStatusSummary? = nil,
         onHubSummaryChange: (@MainActor (HubStatusSummary) -> Void)? = nil,
+        onWelcomeFinished: (@MainActor () -> Void)? = nil,
         roleOverride: DeviceRole? = nil
     ) {
         self.session = session
@@ -42,6 +46,7 @@ public struct HomePadRootView: View {
         self.ambientLight = ambientLight
         self.hubSummary = hubSummary
         self.onHubSummaryChange = onHubSummaryChange
+        self.onWelcomeFinished = onWelcomeFinished
         self.roleOverride = roleOverride
     }
 
@@ -64,7 +69,8 @@ public struct HomePadRootView: View {
                 navigator: navigator,
                 facePosition: facePosition,
                 ambientLight: ambientLight,
-                onSummaryChange: onHubSummaryChange
+                onSummaryChange: onHubSummaryChange,
+                onWelcomeFinished: onWelcomeFinished
             )
         case .companion:
             CompanionRootView(session: session, settings: settings, slots: slots, hubSummary: hubSummary)

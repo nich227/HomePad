@@ -25,14 +25,19 @@ HomePadRootView(
         projectedApps: { AnyView(ProjectedAppsView()) },
         people: { AnyView(PeopleView()) },
         recognitionIndicator: { AnyView(RecognitionChip()) },
-        pairing: { AnyView(PairingView()) }
+        pairing: { AnyView(PairingView()) },
+        deviceUnlock: HubDeviceUnlock(
+            isOffered: { session.canConfirmWithDeviceBiometrics },
+            unlock: { await deviceBiometrics.confirm() }
+        )
     ),
     environment: environment,
     navigator: navigator,
     facePosition: { faceTracker.normalizedPosition },
     ambientLight: { faceTracker.ambientLight },
     hubSummary: summaryReceiver.summary,
-    onHubSummaryChange: { summary in Task { await broadcaster.publish(summary) } }
+    onHubSummaryChange: { summary in Task { await broadcaster.publish(summary) } },
+    onWelcomeFinished: { model.startRecognition() }
 )
 ```
 
@@ -42,6 +47,8 @@ HomePadRootView(
   the whole screen, after a short arrival animation, until it is closed.
 - When a beamed page is a recipe, call `navigator.openRecipe(url, context:)` to open it in the
   recipe reader.
+- Start the camera in `onWelcomeFinished`, not at launch. It is called once, when the first-run
+  welcome has been dismissed or was never needed. See "Permission prompts" below.
 - `HubSummaryBroadcaster` and `HubSummaryReceiver` carry "what the hub is showing" over any
   `PeerChannel` on the channel named `HubStatusSummary.channel`.
 
@@ -56,10 +63,51 @@ HomePadRootView(
 | `projectedApps` | iPhone Apps app. Personal, same rule as Messages | Apps tab |
 | `people` | People app, only while Setup Mode is on | People tab, only while Setup Mode is on |
 | `pairing` | Pairing app, only while Setup Mode is on | People tab, only while Setup Mode is on |
-| `recognitionIndicator` | Next to the profile avatar on faces and on the Home Screen | Hub tab toolbar |
+| `recognitionIndicator` | In the black beside the canvas, under the profile avatar. In the Home Screen header only when the canvas has no margin | Hub tab toolbar |
 
-Slot views are drawn inside the square canvas with a close button above them, so they should lay
-out for a square of any size and not assume the full screen.
+On the companion, the `beam`, `people`, and `pairing` slots are placed inside a
+`NavigationStack`, so a slot view sets a title and does not bring its own stack. The
+`projectedApps` slot fills its tab and brings its own.
+
+Slot apps are drawn by `SlotScreen` inside the square canvas: a title and a round close button
+above, a black background, and the dark color scheme. The slot's text is stepped up through
+Dynamic Type (`SlotTextScale`) so ordinary text styles read from across a room; the view is not
+scaled. A slot view should lay out for a square of any size, use text styles and not fixed point
+sizes, and put an empty state in the middle of the space and not inside a `List` row.
+
+### Touch ID unlock
+
+On an iPad without Face ID hardware, the camera can match a member but cannot prove a live face.
+That match personalizes the hub and leaves personal content locked. The device's own biometrics
+are the second step.
+
+```swift
+public struct HubDeviceUnlock {
+    public var isOffered: @MainActor () -> Bool
+    public var unlock: @MainActor () async -> Bool
+    public init(isOffered: @escaping @MainActor () -> Bool, unlock: @escaping @MainActor () async -> Bool)
+}
+
+// HubFeatureSlots
+public var deviceUnlock: HubDeviceUnlock?   // trailing init parameter, nil by default
+```
+
+While `isOffered()` is true and the active profile is personalized but locked, the shell shows
+"Unlock with Touch ID" (the `touchid` symbol) in four places:
+
+- A round button under the avatar beside the canvas (`hub.deviceUnlock`).
+- Each locked personal app icon: the lock badge becomes a Touch ID badge and the icon accepts a tap.
+- Each locked personal widget: the tile shows the symbol and "Unlock with Touch ID".
+- A capsule in the profile switcher (`switcher.deviceUnlock`).
+
+A tap on a locked app or widget calls `unlock()`. When it returns true and the app is now
+visible to the person, the app opens. The decisions are in `VisibilityPolicy` (Core):
+`tapAction(for:context:isDeviceUnlockOffered:)` returns `.open`, `.requestUnlock`, or `.none`;
+`appToOpen(afterUnlock:requested:context:)` says what opens afterward; and
+`showsDeviceUnlock(context:isDeviceUnlockOffered:)` gates the affordance. With the hook nil or
+not offered, a locked item is inert, as before. After a successful unlock the session is in the
+same state as after a live face match, so every rule keyed on a face match applies, scenes
+included.
 
 ## Settings
 
@@ -67,7 +115,7 @@ The app has no settings screens. Every preference is read through `HomePadSettin
 declared in `UISettings` (`HomePadUICore/UISettings.swift`), and the app never writes one. Where
 someone would look for settings (the profile switcher, the note shown when nobody is set up, and
 the empty states that need a permission or a value) there is one "Open Settings" button that
-opens the system Settings app. The Settings icon on the Home Screen does the same.
+opens the system Settings app. On the hub it is a wide glass capsule (`HubSettingsButton`). The Settings icon on the Home Screen does the same.
 
 Face options are household-wide, because a Settings bundle is static. What is per person is
 state, kept in the `LayoutStore`: the last face they rested on and the order of their Home Screen
@@ -88,12 +136,32 @@ side, so faces keep their proportions at any size.
 
 - **Square (like HomeView)**, the default: the canvas is centered and the rest stays black.
 - **Fill the screen**: the canvas moves to the leading edge (or the top, in portrait) and a second
-  column shows the timers, now playing, weather, and home widgets as the same glass tiles.
+  column shows three Home Screen widgets (timers when one is running, now playing, weather,
+  home, clock), drawn at their Home Screen proportions and scaled to the column.
+
+### Status beside the canvas
+
+Nothing about who is in front of the hub is drawn on a face. `CanvasLayout.status` gives a frame
+in the black around the square: the full height beside it in landscape, a strip above it in
+portrait, and a strip above the second column in fill mode. `BezelStatusView` draws there:
+
+- The active profile's avatar and name, or Guest. A tap opens the profile switcher (`hub.profile`).
+  On the Home Screen the header already shows both, so they are left out here.
+- The `recognitionIndicator` slot, scaled down when it is wider than the space.
+- The Touch ID button, while it is offered.
+- One round button that goes to the Home Screen from a face, and back to the face from the Home
+  Screen (`hub.showHomeScreen`, `hub.showFace`).
+
+In the narrow strip above the second column the buttons share the width and the name is left out.
+When the app's space is square and there is no margin (`status` is nil), the avatar is in the
+Home Screen header only, and small chevrons at the bottom of the canvas move between the face
+and the Home Screen.
 
 ## Faces
 
 Swipe left or right to change faces, or use the arrow keys. Swipe up, press the up arrow, or tap
-the chevron for the Home Screen. Each face has two densities and animates between them:
+the round button beside the canvas for the Home Screen. A face carries no chrome of its own
+except the timer capsule while a timer runs. Each face has two densities and animates between them:
 `Proximity.far` shows less, larger; `.near` shows more. `ui.display.adaptiveDetail` turns this
 off, which keeps the detailed layout.
 
@@ -146,10 +214,12 @@ off, which keeps the detailed layout.
   `newsroom-user-recognition.jpg`): the blurred face behind, the uppercase greeting and name, the
   round avatar at top right, four columns of large rounded icons with labels, and two by two
   widget tiles in the same grid.
-- **Home app** (`newsroom-home-touch.jpg`): a light three-column grid of rounded tiles, lilac when
-  on and grey when off, with a tile-less clock in the first cell.
-- **First run** (`guide-hello.png`): a warm red and orange shape on cream behind a hello
-  animation.
+- **Home app** (`newsroom-home-touch.jpg`): a three-column grid of rounded tiles with a tile-less
+  clock in the first cell. The grid follows the screenshot. The colors do not: the app is dark
+  like the rest of the shell, and a tile is lit when its accessory is on.
+- **First run** (`guide-hello.png`): a warm red, pink, and yellow shape on cream behind a hello
+  animation, with two wide capsules, Not Now and Add People. The capsules are solid, because
+  glass on cream loses a white label.
 
 ### What was approximated
 
@@ -167,9 +237,15 @@ off, which keeps the detailed layout.
 - **Fade.** The review screenshot could not be fetched (see below). The gray dial and blue second
   hand come from the written description; the layout comes from the pink Fade face in Apple's
   image. Which side the numerals cluster on is tied to the minute hand here, which is a guess.
+- **Photos digits.** The four digits are drawn from strokes (`TallDigits` in Core) with one
+  uniform width and filled as a single translucent shape. HomeView's digits have a glass edge
+  and refract the photo; these do not.
 - **Recipe steps, ingredient list, timer controls, the profile switcher, alarms, mirror.** No
   screenshot showed these screens. They reuse the visual pieces that are shown: round glass
   buttons, wide glass capsules, the rounded-square tiles, and the orange timer accent.
+- **Empty states.** No screenshot showed an app with nothing in it. Every native app uses one
+  layout (`HubEmptyState`): a large symbol, a title, one line of explanation, and at most one
+  action, centered in the canvas.
 - **Music.** The lyrics, queue, and "more" buttons in the screenshot are left out because the
   system music player gives a third-party app nothing to put behind them. The speaker button is
   the system route picker.
@@ -203,8 +279,11 @@ did download.
 
 Swipe up from a face. It shows the greeting, the active profile (or Guest), and a four-column
 grid of icons and two by two widgets, packed by `HomeGridPacker`. Drag an icon or widget onto
-another to reorder; the order is saved per profile. Pull down past the top, tap the chevron, or
-press Escape to go back to the face.
+another to reorder; the order is saved per profile. Pull down past the top, tap the round button beside
+the canvas, or press Escape to go back to the face.
+
+Icons sit in `HomeGridLayout`, which gives each icon and widget its packed cell. A widget starts
+on an even column, so two widgets or a widget and a block of four icons share a row.
 
 Who sees what is decided by `VisibilityPolicy`:
 
@@ -212,26 +291,54 @@ Who sees what is decided by `VisibilityPolicy`:
 |---|---|---|---|---|---|
 | guest | Clock, Timers, Home, Music, Mirror, Recipes, Weather, Beam, Settings | Clock, Calendar, Weather, Timers, Now Playing, Home, Thermostat, Camera, Photo | shown | shown | shown |
 | member | Alarms, Photos | Next Alarm | hidden | shown | shown |
-| personal | Messages, iPhone Apps | Messages | hidden | greyed out, cannot open | shown |
+| personal | Messages, iPhone Apps | Messages | hidden | greyed out with a lock badge, cannot open. While Touch ID is offered, a tap asks for it | shown |
 | setup | People, Pairing | none | only in Setup Mode | only in Setup Mode | only in Setup Mode |
 
 When the person in front of the hub changes, an open app they may not see closes at once
 (`HubNavigationState.audienceChanged`). Tapping the avatar opens the manual switcher, which calls
 `HouseholdSession.switchManually` and so never unlocks personal content.
 
+## Permission prompts
+
+The hub asks for a permission when the person first reaches the thing that needs it, and never
+on the welcome.
+
+| Prompt | Appears |
+|---|---|
+| Camera | After the welcome is dismissed, or at launch when no welcome is due. The app starts face recognition from `onWelcomeFinished`. |
+| HomeKit | The first time Home Modular or Home Camera is the face in front, a home widget scrolls into view, or the Home app opens. |
+| Apple Music | The first time a now playing tile is on the face in front or scrolls into view, or the Music app opens. |
+| Photos | Only with the Shared Album source, the first time the Photos face is in front. The photo picker needs no permission. |
+
+Views start a service with the `startsOnFirstUse` modifier, which waits for `\.hubMayPrompt`.
+That value is false while the welcome is up. In the face pager it is true only for the face in
+front, because neighboring faces are built ahead of time. Home Screen widgets start when they
+scroll into view.
+
 ## Apps
 
 | App | Notes |
 |---|---|
 | Clock | Analog and digital time, date, next alarm. |
-| Timers | Any number of named timers from presets. `TimerEngine` is the state machine; `TimerCenter` runs it, saves it, and rings. Running timers show as a glass capsule on every face. A finished timer covers the canvas until stopped. |
-| Alarms | One-time or daily alarms. They ring while the app is in front. |
-| Home | Scenes, accessories on and off, brightness from the tile's context menu, thermostat target, and cameras through `HMCameraView` (snapshots in tiles, a live stream when opened). A guest can lock a door but not unlock one (`HomeControlPolicy`). |
+| Timers | Any number of named timers from a three by three grid of presets. `TimerEngine` is the state machine; `TimerCenter` runs it, saves it, and rings. A started timer opens full screen with pause and delete under the time. Running timers show as a glass capsule on every face. A finished timer covers the canvas until stopped. |
+| Alarms | One-time or daily alarms. The new alarm's time is set with large up and down buttons for the hour and for the minute, in steps of five minutes (`AlarmTimeDraft`). Alarms ring while the app is in front. |
+| Home | Scenes, accessories on and off, brightness from the tile's context menu, thermostat target, and cameras through `HMCameraView` (snapshots in tiles, a live stream when opened). A guest can lock a door but not unlock one. Scenes: see below. |
 | Music | Now playing and transport through `MPMusicPlayerController.systemMusicPlayer`. |
 | Mirror | Front camera, full view or zoomed. |
 | Recipes | Paste or beam a link. `RecipeParser` reads schema.org Recipe JSON-LD from the page's HTML; the reader shows a cover, an ingredient checklist, and one step at a time with a timer button for any duration the step mentions. |
 | Weather | WeatherKit behind `WeatherProviding`. Off until a city and coordinates are entered in Settings. |
 | Photos | The system photo picker. Chosen photos are copied into the app's storage. |
+
+### Who may run a scene
+
+A scene can do anything its owner put in it, including unlock a door. Only a household member
+the hub has recognized by face may run one: `HomeControlPolicy.mayRunScenes(activation:profiles:)`
+is true only for `.face` with an enrolled profile. A guest and a profile picked by hand are
+refused. A member confirmed by Touch ID counts, because the session then holds a face
+activation. Scenes are not hidden from everyone else. Every scene tile, in the Home app and on
+Home Modular, is dimmed with a lock badge and "Members only", and the Home app adds one line
+that says why (`home.scenesLocked`). A tap on a locked scene does
+nothing, and the service is not called.
 
 Services sit behind protocols (`HomeService`, `MusicService`, `CameraPreviewService`,
 `WeatherProviding`, `RecipePageLoading`) and `HubEnvironment.preview()` supplies stand-ins, so
@@ -247,7 +354,7 @@ lowers the screen brightness and restores it afterward. A tap wakes the hub for 
 ## Animation
 
 Lottie animations from `HomePadAnimations` mark single moments: `hello` on first run, `timerDone`
-when a timer finishes, `presencePulse` around the profile chip while someone is in view,
+when a timer finishes, `presencePulse` around the avatar beside the canvas while someone is in view,
 `beamIncoming` when a page takes over the screen, and `listening`, `pairing`, and `faceScan` in
 empty states. Everything that follows data continuously is SwiftUI: clock hands, the Flow face
 (`TimelineView`, `Canvas`, `MeshGradient`), and the change between far and near layouts. Reduce
@@ -287,3 +394,47 @@ No background modes. No network listener. Recipe pages are fetched over HTTPS wi
 session; plain HTTP pages are blocked by App Transport Security unless the app adds an exception.
 State is stored under `Application Support/HomePad/UI` (layouts, timers, alarms, chosen photos);
 none of it is a secret, and nothing is logged.
+
+## UI tests and screenshots
+
+`HomePadUITests` walks the app in the simulator and saves a screenshot at each stop to
+`design/screenshots`. Run it with `Scripts/ui-walkthrough.sh` for the iPad hub and
+`Scripts/ui-walkthrough.sh "iPhone 18 Pro"` for the companion. The hub tests skip on an iPhone
+and the companion tests skip on an iPad. Controls are found by accessibility identifier. A
+container must not carry an identifier, because it replaces the identifiers of the controls
+inside it.
+
+The tests put the app in a known state through launch environment variables. `HubTestHooks`
+(Core) parses them in one place. Every hook is off unless its variable is set, debug builds
+alone read them, and none is a preference.
+
+| Variable | Effect |
+|---|---|
+| `HOMEPAD_UITEST_EPHEMERAL=1` | Layouts, timers, alarms, and photos stay in memory. |
+| `HOMEPAD_UITEST_SAMPLE=1` | A sample household, home, music, weather, and recipe page stand in for the real services. Implies ephemeral. On the iPhone, a sample hub summary. |
+| `HOMEPAD_UITEST_AUDIENCE=guest\|manual\|recognized` | Who is in front of the hub: nobody known, the first profile picked by hand, or the first profile recognized by face. |
+| `HOMEPAD_UITEST_PROXIMITY=far\|near` | How close they are. |
+| `HOMEPAD_UITEST_CANVAS=fill` | The fill layout for this launch, whatever Settings says. |
+| `HOMEPAD_UITEST_NIGHT=1` | The night clock, whatever the schedule says. |
+| `HOMEPAD_UITEST_SKIP_WELCOME=1` | No first-run welcome. |
+| `HOMEPAD_UITEST_DEVICE_UNLOCK=1` | A camera match without a liveness proof is waiting and Touch ID is offered. A tap on the affordance confirms it. The hook stands in for the `deviceUnlock` slot, because the simulator has no biometric hardware. |
+
+Screenshot names:
+
+| Prefix | Launch | Shows |
+|---|---|---|
+| `a01`, `a02` | First launch, permissions reset | The welcome with no prompt on it, then the camera prompt after Not Now |
+| `a101` to `a111` | Guest, far | The eleven faces in order |
+| `a30`, `a31`, `a4-app-*` | Guest | Home Screen, top and scrolled, and each app a guest may open, empty |
+| `b101` to `b111` | Recognized member, near, sample data | The eleven faces with detail |
+| `b30`, `b31`, `b4-app-*`, `b45` | Recognized member | Home Screen and apps with content, an alarm added |
+| `b50` to `b53` | Recognized member | Timer presets, the ring, the list, the capsule on a face |
+| `b60` to `b64` | Recognized member | Recipe entry, cover, ingredients, two steps |
+| `b70` | Recognized member | Profile switcher |
+| `c10` to `c13` | Guest, near, fill layout | Fill layout faces and Home Screen, and the Home app with scenes locked |
+| `c20` | Profile picked by hand | Home Screen with personal items greyed out |
+| `c30` | Night hook | Night clock |
+| `c40` to `c42` | Touch ID hook | Home Screen and switcher with the Touch ID affordance, then Messages opened by it |
+| `p10` to `p13`, `p20` | iPhone | The four companion tabs, and the Hub tab with a summary |
+
+`design/screenshots/before/` holds the walkthrough from before the visual pass.

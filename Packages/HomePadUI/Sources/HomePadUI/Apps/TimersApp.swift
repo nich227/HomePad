@@ -46,12 +46,6 @@ struct TimersApp: View {
             AppScreen(title: "Timers", onClose: onClose) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: metrics.pt(3)) {
-                        newTimer
-                        if center.lastError == .limitReached(center.engine.limit) {
-                            Text("Remove a timer to add another.")
-                                .font(.system(size: metrics.text(3)))
-                                .foregroundStyle(Color(RainbowTint.red))
-                        }
                         TimelineView(.periodic(from: .startOfCurrentSecond, by: 1)) { _ in
                             VStack(spacing: metrics.pt(2)) {
                                 ForEach(center.engine.timers) { timer in
@@ -59,6 +53,12 @@ struct TimersApp: View {
                                 }
                             }
                         }
+                        if center.lastError == .limitReached(center.engine.limit) {
+                            Text("Remove a timer to add another.")
+                                .font(.system(size: metrics.text(3)))
+                                .foregroundStyle(Color(RainbowTint.red))
+                        }
+                        newTimer
                     }
                     .padding(.horizontal, metrics.pt(1))
                 }
@@ -67,39 +67,48 @@ struct TimersApp: View {
         }
     }
 
+    /// Presets as a three by three grid of tiles, each a large number over "MIN", the way the
+    /// running timer captions its length.
     private var newTimer: some View {
-        VStack(alignment: .leading, spacing: metrics.pt(2)) {
+        let gap = metrics.pt(2.2)
+        let cell = (metrics.side - metrics.pt(4) * 2 - metrics.pt(1) * 2 - gap * 2) / 3
+        return VStack(alignment: .leading, spacing: metrics.pt(2.4)) {
             TextField("Name (optional)", text: $name)
                 .font(.system(size: metrics.text(3.4)))
                 .textFieldStyle(.plain)
                 .foregroundStyle(.white)
-                .padding(.horizontal, metrics.pt(3))
+                .padding(.horizontal, metrics.pt(3.5))
                 .frame(height: metrics.pt(9))
                 .background(Capsule().fill(Color.hubTileFill))
                 .accessibilityLabel("Timer name")
-            ScrollView(.horizontal) {
-                HStack(spacing: metrics.pt(2)) {
-                    ForEach(Self.presetMinutes, id: \.self) { minutes in
-                        Button {
-                            if let timer = environment.timers.add(name: name, duration: TimeInterval(minutes * 60)) {
-                                focused = timer.id
-                                name = ""
-                            }
-                        } label: {
-                            Text("\(minutes) min")
-                                .font(.system(size: metrics.text(3.3), weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, metrics.pt(3.4))
-                                .frame(height: metrics.pt(9))
-                                .contentShape(Capsule())
+                .accessibilityIdentifier("timers.name")
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: gap), count: 3), spacing: gap) {
+                ForEach(Self.presetMinutes, id: \.self) { minutes in
+                    Button {
+                        if let timer = environment.timers.add(name: name, duration: TimeInterval(minutes * 60)) {
+                            focused = timer.id
+                            name = ""
                         }
-                        .buttonStyle(.plain)
-                        .hubGlass(in: Capsule(), tint: Color(RainbowTint.orange).opacity(0.35), interactive: true)
-                        .accessibilityLabel("Start a \(minutes) minute timer")
+                    } label: {
+                        VStack(spacing: 0) {
+                            Text(verbatim: "\(minutes)")
+                                .font(.system(size: metrics.pt(11), weight: .medium))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                            Text("MIN")
+                                .font(.system(size: metrics.text(3), weight: .semibold))
+                                .foregroundStyle(Color(RainbowTint.orange))
+                        }
+                        .frame(width: cell, height: cell * 0.62)
+                        .background(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous).fill(Color.hubTileFill))
+                        .contentShape(RoundedRectangle(cornerRadius: metrics.tileRadius, style: .continuous))
                     }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityLabel("Start a \(minutes) minute timer")
+                    .accessibilityIdentifier("timers.preset.\(minutes)")
                 }
             }
-            .scrollIndicators(.hidden)
         }
     }
 
@@ -129,17 +138,17 @@ struct TimersApp: View {
     }
 
     @ViewBuilder
-    private func controls(_ timer: HubTimer) -> some View {
+    private func controls(_ timer: HubTimer, size: CGFloat = 8) -> some View {
         let center = environment.timers
         switch timer.state {
         case .running:
-            GlassCircleButton(symbol: "pause.fill", label: "Pause", size: 8) { center.pause(timer.id) }
+            GlassCircleButton(symbol: "pause.fill", label: "Pause", size: size, identifier: "timers.pause") { center.pause(timer.id) }
         case .paused:
-            GlassCircleButton(symbol: "play.fill", label: "Resume", size: 8) { center.resume(timer.id) }
+            GlassCircleButton(symbol: "play.fill", label: "Resume", size: size, identifier: "timers.resume") { center.resume(timer.id) }
         case .idle, .finished:
-            GlassCircleButton(symbol: "play.fill", label: "Start", size: 8) { center.start(timer.id) }
+            GlassCircleButton(symbol: "play.fill", label: "Start", size: size, identifier: "timers.start") { center.start(timer.id) }
         }
-        GlassCircleButton(symbol: "trash.fill", label: "Delete", size: 8) { center.remove(timer.id) }
+        GlassCircleButton(symbol: "trash.fill", label: "Delete", size: size, identifier: "timers.delete") { center.remove(timer.id) }
     }
 
     /// One timer full screen: the ring of ticks, the time left, and the timer's length.
@@ -165,19 +174,21 @@ struct TimersApp: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
                     .padding(.horizontal, metrics.pt(22))
+                    // Sits above center so the controls have room inside the ring.
+                    .padding(.bottom, metrics.pt(14))
                     .accessibilityElement(children: .combine)
                 }
             }
             VStack {
                 HStack {
-                    GlassCircleButton(symbol: "chevron.left", label: "All Timers") { focused = nil }
+                    GlassCircleButton(symbol: "chevron.left", label: "All Timers", identifier: "timers.all") { focused = nil }
                     Spacer()
                 }
                 Spacer()
-                HStack {
-                    controls(timer)
+                HStack(spacing: metrics.pt(5)) {
+                    controls(timer, size: 12)
                 }
-                .padding(.bottom, metrics.pt(15))
+                .padding(.bottom, metrics.pt(13))
             }
             .padding(metrics.pt(4))
         }
@@ -197,7 +208,7 @@ struct AlarmsApp: View {
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.calendar) private var calendar
     @Environment(HubEnvironment.self) private var environment
-    @State private var time = Date()
+    @State private var draft: AlarmTimeDraft?
     @State private var label = ""
     @State private var repeatsDaily = false
 
@@ -211,7 +222,7 @@ struct AlarmsApp: View {
                         Text("No Alarms")
                             .font(.system(size: metrics.text(4), weight: .semibold))
                             .foregroundStyle(Color.hubSecondaryText)
-                            .padding(.top, metrics.pt(8))
+                            .padding(.top, metrics.pt(5))
                     }
                     ForEach(center.book.alarms) { alarm in
                         row(alarm)
@@ -223,38 +234,93 @@ struct AlarmsApp: View {
         }
     }
 
+    /// The time being set. Starts at the next five minutes from now.
+    private var currentDraft: AlarmTimeDraft {
+        if let draft { return draft }
+        let parts = calendar.dateComponents([.hour, .minute], from: Date())
+        return AlarmTimeDraft(hour: parts.hour ?? 7, minute: parts.minute ?? 0)
+    }
+
+    private func step(_ change: (inout AlarmTimeDraft) -> Void) {
+        var next = currentDraft
+        change(&next)
+        draft = next
+    }
+
+    /// The new alarm's time in large digits, with a pair of arrows for the hour and a pair for
+    /// the minute, sized to press from across a counter.
     private var newAlarm: some View {
-        HStack(spacing: metrics.pt(2)) {
-            DatePicker("Alarm time", selection: $time, displayedComponents: .hourAndMinute)
-                .labelsHidden()
-            TextField("Label", text: $label)
-                .font(.system(size: metrics.text(3.2)))
-                .textFieldStyle(.plain)
-                .foregroundStyle(.white)
-            Button {
-                repeatsDaily.toggle()
-            } label: {
-                Image(systemName: "repeat")
-                    .font(.system(size: metrics.pt(3.6), weight: .semibold))
-                    .foregroundStyle(repeatsDaily ? Color(RainbowTint.orange) : Color.hubSecondaryText)
-                    .frame(width: metrics.pt(8), height: metrics.pt(8))
+        let time = currentDraft
+        let moment = calendar.date(bySettingHour: time.hour, minute: time.minute, second: 0, of: Date()) ?? Date()
+        return VStack(spacing: metrics.pt(2.4)) {
+            HStack(spacing: metrics.pt(3)) {
+                stepper(name: "hour", label: "Hour") { delta in step { $0.stepHour(by: delta) } }
+                Text(moment, format: .dateTime.hour().minute())
+                    .font(.system(size: metrics.pt(15), weight: .light))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: .infinity)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.2), value: time)
+                    .accessibilityLabel("New alarm time")
+                    .accessibilityIdentifier("alarms.time")
+                stepper(name: "minute", label: "Minute") { delta in step { $0.stepMinute(by: delta) } }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Repeat every day")
-            .accessibilityAddTraits(repeatsDaily ? .isSelected : [])
-            GlassCircleButton(symbol: "plus", label: "Add Alarm", size: 8) {
-                let parts = calendar.dateComponents([.hour, .minute], from: time)
-                environment.alarms.add(
-                    hour: parts.hour ?? 7,
-                    minute: parts.minute ?? 0,
-                    label: label,
-                    repeatDays: repeatsDaily ? Set(Weekday.allCases) : []
-                )
-                label = ""
+            HStack(spacing: metrics.pt(2)) {
+                TextField("Label", text: $label)
+                    .font(.system(size: metrics.text(3.4)))
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, metrics.pt(3.5))
+                    .frame(height: metrics.pt(10))
+                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .accessibilityIdentifier("alarms.label")
+                Button {
+                    repeatsDaily.toggle()
+                } label: {
+                    Label("Daily", systemImage: "repeat")
+                        .font(.system(size: metrics.text(3.2), weight: .semibold))
+                        .foregroundStyle(repeatsDaily ? .black : .white)
+                        .padding(.horizontal, metrics.pt(3.2))
+                        .frame(height: metrics.pt(10))
+                        .background(Capsule().fill(repeatsDaily ? Color(RainbowTint.orange) : Color.white.opacity(0.08)))
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Repeat every day")
+                .accessibilityAddTraits(repeatsDaily ? .isSelected : [])
+                .accessibilityIdentifier("alarms.repeat")
+                GlassCapsuleButton(title: "Add", symbol: "plus", tint: Color(RainbowTint.orange).opacity(0.5), identifier: "alarms.add") {
+                    environment.alarms.add(
+                        hour: time.hour,
+                        minute: time.minute,
+                        label: label,
+                        repeatDays: repeatsDaily ? Set(Weekday.allCases) : []
+                    )
+                    label = ""
+                }
+                .frame(width: metrics.pt(24), height: metrics.pt(10))
             }
         }
-        .padding(metrics.pt(2.6))
+        .padding(metrics.pt(3))
         .background(RoundedRectangle(cornerRadius: metrics.pt(5), style: .continuous).fill(Color.hubTileFill))
+    }
+
+    private func stepper(name: String, label: LocalizedStringKey, change: @escaping (Int) -> Void) -> some View {
+        VStack(spacing: metrics.pt(1.4)) {
+            GlassCircleButton(symbol: "chevron.up", label: "Later", size: 10, identifier: "alarms.\(name).up") { change(1) }
+            Text(label)
+                .font(.system(size: metrics.text(2.6), weight: .semibold))
+                .textCase(.uppercase)
+                .foregroundStyle(Color.hubSecondaryText)
+                .accessibilityHidden(true)
+            GlassCircleButton(symbol: "chevron.down", label: "Earlier", size: 10, identifier: "alarms.\(name).down") { change(-1) }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
     }
 
     private func caption(_ alarm: HubAlarm) -> String {

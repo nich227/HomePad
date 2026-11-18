@@ -7,8 +7,13 @@ import SwiftUI
 struct HomeScreenView: View {
     let layout: HomeScreenLayout
     let profileCount: Int
-    let recognitionIndicator: @MainActor () -> AnyView
+    /// Nil when the status is already shown beside the canvas.
+    let recognitionIndicator: (@MainActor () -> AnyView)?
     let onOpen: (HubApp) -> Void
+    /// Runs the device's biometrics, then opens the app if that unlocked it.
+    let onUnlock: (HubApp) -> Void
+    /// False when a button beside the canvas already leads back to the face.
+    let showsFaceButton: Bool
     let onMove: (String, String) -> Void
     let onProfile: () -> Void
     let onClose: () -> Void
@@ -16,6 +21,7 @@ struct HomeScreenView: View {
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubPreferences) private var preferences
     @Environment(\.hubAudience) private var audience
+    @Environment(\.hubShowsDeviceUnlock) private var showsDeviceUnlock
     @Environment(\.calendar) private var calendar
     @Environment(HouseholdSession.self) private var session
 
@@ -41,31 +47,18 @@ struct HomeScreenView: View {
                 if VisibilityPolicy.needsSetupHint(profileCount: profileCount, setupMode: preferences.setupMode) {
                     setupNote
                 }
-                ZStack(alignment: .topLeading) {
+                HomeGridLayout(packed: packed, columns: Self.columns, cell: cell, rowHeight: rowHeight, gapX: gapX, gapY: gapY) {
                     ForEach(packed.placements) { placement in
-                        let span = CGFloat(placement.span)
                         itemView(placement.item)
-                            .frame(
-                                width: cell * span + gapX * (span - 1),
-                                height: rowHeight * span + gapY * (span - 1)
-                            )
-                            .offset(
-                                x: CGFloat(placement.column) * (cell + gapX),
-                                y: CGFloat(placement.row) * (rowHeight + gapY)
-                            )
                     }
                 }
-                .frame(
-                    width: metrics.side - margin * 2,
-                    height: max(0, CGFloat(packed.rowCount) * (rowHeight + gapY) - gapY),
-                    alignment: .topLeading
-                )
             }
             .padding(.horizontal, margin)
             .padding(.top, metrics.pt(9))
             .padding(.bottom, metrics.pt(12))
         }
         .scrollIndicators(.hidden)
+        .accessibilityIdentifier("hub.homeScreen")
         .onScrollGeometryChange(for: Bool.self) { geometry in
             geometry.contentOffset.y + geometry.contentInsets.top < -metrics.pt(13)
         } action: { _, pulledPastTop in
@@ -74,17 +67,20 @@ struct HomeScreenView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            Button(action: onClose) {
-                Image(systemName: "chevron.compact.down")
-                    .font(.system(size: metrics.pt(5), weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.75))
-                    .frame(width: metrics.pt(16), height: metrics.pt(6))
-                    .contentShape(Rectangle())
+            if showsFaceButton {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.compact.down")
+                        .font(.system(size: metrics.pt(5), weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(width: metrics.pt(16), height: metrics.pt(6))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel("Show Face")
+                .accessibilityIdentifier("hub.showFace")
+                .padding(.bottom, metrics.pt(1.5))
             }
-            .buttonStyle(.plain)
-            .hoverEffect(.highlight)
-            .accessibilityLabel("Show Face")
-            .padding(.bottom, metrics.pt(1.5))
         }
     }
 
@@ -103,13 +99,16 @@ struct HomeScreenView: View {
             .lineLimit(1)
             .accessibilityElement(children: .combine)
             Spacer()
-            recognitionIndicator()
+            if let recognitionIndicator {
+                recognitionIndicator()
+            }
             Button(action: onProfile) {
                 ProfileAvatar(profile: session.activeProfile, diameter: metrics.pt(9.5))
             }
             .buttonStyle(.plain)
             .hoverEffect(.lift)
             .accessibilityLabel(session.activeProfile.map { Text("Switch profile. Current: \($0.name)") } ?? Text("Switch profile. Current: Guest"))
+            .accessibilityIdentifier("hub.profile")
         }
     }
 
@@ -127,9 +126,7 @@ struct HomeScreenView: View {
             Text("No one is set up yet. To add people, turn on Setup Mode in Settings.")
                 .font(.system(size: metrics.text(3.1), weight: .medium))
                 .foregroundStyle(.white)
-            OpenSettingsButton()
-                .font(.system(size: metrics.text(3.1), weight: .semibold))
-                .buttonStyle(.glass)
+            HubSettingsButton()
         }
         .padding(metrics.pt(3.5))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -139,12 +136,20 @@ struct HomeScreenView: View {
     @ViewBuilder
     private func itemView(_ item: HomeScreenItem) -> some View {
         let visibility = VisibilityPolicy.visibility(for: item.access, context: audience)
+        let tap = VisibilityPolicy.tapAction(for: item.access, context: audience, isDeviceUnlockOffered: showsDeviceUnlock)
+        let act: (HubApp) -> Void = { app in
+            switch tap {
+            case .open: onOpen(app)
+            case .requestUnlock: onUnlock(app)
+            case .none: break
+            }
+        }
         Group {
             switch item {
             case .app(let app):
-                AppIconView(app: app, isRedacted: visibility == .redacted) { onOpen(app) }
+                AppIconView(app: app, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(app) }
             case .widget(let widget):
-                HomeWidgetView(kind: widget, isRedacted: visibility == .redacted) { onOpen(widget.app) }
+                HomeWidgetView(kind: widget, isRedacted: visibility == .redacted, offersUnlock: tap == .requestUnlock) { act(widget.app) }
             }
         }
         .draggable(item.id)
@@ -156,10 +161,51 @@ struct HomeScreenView: View {
     }
 }
 
+extension AppIconView {
+    fileprivate var lockedHint: Text {
+        if offersUnlock { return Text("Locked. Unlock with Touch ID to open.") }
+        return isRedacted ? Text("Locked until the hub recognizes its owner.") : Text(verbatim: "")
+    }
+}
+
+/// Puts each icon and widget in its grid cell. A real layout, so each item's frame is where it
+/// is drawn and scroll visibility can be judged per item.
+struct HomeGridLayout: Layout {
+    let packed: HomeGridPacker.Result
+    let columns: Int
+    let cell: CGFloat
+    let rowHeight: CGFloat
+    let gapX: CGFloat
+    let gapY: CGFloat
+
+    private func size(span: Int) -> CGSize {
+        let count = CGFloat(span)
+        return CGSize(width: cell * count + gapX * (count - 1), height: rowHeight * count + gapY * (count - 1))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let columns = CGFloat(columns)
+        let rows = CGFloat(packed.rowCount)
+        return CGSize(width: cell * columns + gapX * (columns - 1), height: max(0, rows * (rowHeight + gapY) - gapY))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (subview, placement) in zip(subviews, packed.placements) {
+            let origin = CGPoint(
+                x: bounds.minX + CGFloat(placement.column) * (cell + gapX),
+                y: bounds.minY + CGFloat(placement.row) * (rowHeight + gapY)
+            )
+            subview.place(at: origin, anchor: .topLeading, proposal: ProposedViewSize(size(span: placement.span)))
+        }
+    }
+}
+
 /// An app icon: a rounded square in the app's color with its symbol, and the name underneath.
 struct AppIconView: View {
     let app: HubApp
     let isRedacted: Bool
+    /// The icon is locked, and tapping it asks for the device's biometrics.
+    var offersUnlock = false
     let action: () -> Void
     @Environment(\.hubMetrics) private var metrics
 
@@ -178,18 +224,20 @@ struct AppIconView: View {
                     Image(systemName: app.symbolName)
                         .font(.system(size: size * 0.5, weight: .medium))
                         .foregroundStyle(.white)
-                    if isRedacted {
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: size * 0.2, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(size * 0.07)
-                            .background(Circle().fill(.black.opacity(0.6)))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    }
                 }
                 .frame(width: size, height: size)
                 .saturation(isRedacted ? 0 : 1)
                 .opacity(isRedacted ? 0.5 : 1)
+                .overlay(alignment: .bottomTrailing) {
+                    if isRedacted {
+                        Image(systemName: offersUnlock ? "touchid" : "lock.fill")
+                            .font(.system(size: size * (offersUnlock ? 0.3 : 0.2), weight: .bold))
+                            .foregroundStyle(offersUnlock ? Color(RainbowTint.red) : .white)
+                            .padding(size * 0.07)
+                            .background(Circle().fill(offersUnlock ? Color.white : Color.black.opacity(0.6)))
+                            .offset(x: size * 0.08, y: size * 0.08)
+                    }
+                }
                 Text(app.title)
                     .font(.system(size: metrics.text(2.9), weight: .medium))
                     .foregroundStyle(.white.opacity(isRedacted ? 0.5 : 1))
@@ -201,8 +249,9 @@ struct AppIconView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isRedacted)
+        .disabled(isRedacted && !offersUnlock)
         .hoverEffect(.lift)
-        .accessibilityHint(isRedacted ? Text("Locked until the hub recognizes its owner.") : Text(verbatim: ""))
+        .accessibilityHint(lockedHint)
+        .accessibilityIdentifier("app.\(app.rawValue)")
     }
 }

@@ -100,16 +100,39 @@ import Testing
         #expect(portrait.square == CanvasFrame(x: 12, y: 183, width: 1000, height: 1000))
     }
 
+    @Test func status_whenSquareHasBlackBeside_thenStatusSitsInThatMarginNotOnTheSquare() {
+        let landscape = CanvasLayout(width: 1366, height: 1024, mode: .square)
+        #expect(landscape.status == CanvasFrame(x: 1195, y: 0, width: 171, height: 1024))
+        let portrait = CanvasLayout(width: 1024, height: 1366, mode: .square)
+        #expect(portrait.status == CanvasFrame(x: 0, y: 0, width: 1024, height: 171))
+    }
+
+    @Test func status_whenSquareFillsTheWindow_thenNoStatus() {
+        #expect(CanvasLayout(width: 1000, height: 1040, mode: .square).status == nil)
+        #expect(CanvasLayout(width: 1040, height: 1000, mode: .square).status == nil)
+        #expect(CanvasLayout(width: 0, height: 0, mode: .square).status == nil)
+    }
+
+    @Test func status_whenFill_thenStatusTakesAStripOfTheSecondColumn() {
+        let landscape = CanvasLayout(width: 1400, height: 1000, mode: .fill)
+        #expect(landscape.status == CanvasFrame(x: 1000, y: 0, width: 400, height: 130))
+        #expect(landscape.side == CanvasFrame(x: 1000, y: 130, width: 400, height: 870))
+        let portrait = CanvasLayout(width: 1000, height: 1400, mode: .fill)
+        #expect(portrait.status == CanvasFrame(x: 870, y: 1000, width: 130, height: 400))
+        #expect(portrait.side == CanvasFrame(x: 0, y: 1000, width: 870, height: 400))
+    }
+
     @Test func layout_whenFillLandscape_thenSquareLeadingAndSideColumn() {
         let layout = CanvasLayout(width: 1366, height: 1024, mode: .fill, margin: 0, gap: 16)
         #expect(layout.square == CanvasFrame(x: 0, y: 0, width: 1024, height: 1024))
-        #expect(layout.side == CanvasFrame(x: 1040, y: 0, width: 326, height: 1024))
+        #expect(layout.side?.x == 1040 && layout.side?.width == 326)
+        #expect(layout.status?.x == 1040 && layout.status?.y == 0)
     }
 
     @Test func layout_whenFillPortrait_thenSideGoesBelow() {
         let layout = CanvasLayout(width: 800, height: 1200, mode: .fill, gap: 10)
         #expect(layout.square == CanvasFrame(x: 0, y: 0, width: 800, height: 800))
-        #expect(layout.side == CanvasFrame(x: 0, y: 810, width: 800, height: 390))
+        #expect(layout.side == CanvasFrame(x: 0, y: 810, width: 696, height: 390))
     }
 
     @Test func layout_whenFillButLeftoverTooSmall_thenCenteredWithoutSide() {
