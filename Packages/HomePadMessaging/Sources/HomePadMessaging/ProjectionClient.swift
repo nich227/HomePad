@@ -134,6 +134,17 @@ public final class ProjectionClient {
 
     public var proximity: Proximity { session.proximity }
 
+    // MARK: Context summaries
+
+    /// Short text summaries of the active member's projected content: recent messages, coming
+    /// events, open reminders, and what is playing. Empty unless personal content is unlocked and
+    /// that member's iPhone is connected and projecting, the same rule `content(for:depth:)` follows.
+    ///
+    /// The result holds personal text. Keep it in memory and never log it.
+    public func contextSummaries(limit: Int = 8, maxTextLength: Int = 140) -> [ProjectedContextSummary] {
+        state.contextSummaries(viewer: viewer, limit: limit, maxTextLength: maxTextLength, now: now())
+    }
+
     // MARK: Replies
 
     /// How a reply typed on the hub would be delivered for this conversation, as data the UI explains.

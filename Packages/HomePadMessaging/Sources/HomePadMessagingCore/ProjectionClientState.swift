@@ -286,4 +286,29 @@ public struct ProjectionClientState: Sendable, Equatable {
     public func navigationDepth(for id: ProjectedAppEntryID) -> Int {
         devices[id.deviceID]?.stacks.reveal()[id.appID]?.count ?? 0
     }
+
+    /// Short text summaries of what the viewer's own companion projects, for a consumer that does
+    /// not know the templates. Empty unless the viewer is a member with personal content unlocked
+    /// and a companion of theirs is projecting.
+    ///
+    /// It reads the apps `entries` lists as visible, so an app the hub does not show gives nothing.
+    /// A shared app such as Now Playing is visible to everyone, and here it still says what one
+    /// member is doing, so the companion's owner is checked with the rule for personal apps.
+    public func contextSummaries(
+        viewer: ViewerContext,
+        limit: Int,
+        maxTextLength: Int,
+        now: Date,
+        timeStyle: ProjectedContextTimeStyle = .current
+    ) -> [ProjectedContextSummary] {
+        let sources = entries(viewer: viewer).compactMap { entry -> ProjectedContextSource? in
+            guard entry.decision.visibility == .visible,
+                  let owner = entry.ownerProfileID,
+                  ProjectionVisibilityPolicy.showsPersonalContent(ownerProfileID: owner, viewer: viewer)
+            else { return nil }
+            let stack = devices[entry.id.deviceID]?.stacks.reveal()[entry.id.appID] ?? []
+            return ProjectedContextSource(entryID: entry.id, ownerProfileID: owner, templates: stack.map(\.template))
+        }
+        return ProjectedContextSummarizer.summaries(from: sources, limit: limit, maxTextLength: maxTextLength, now: now, timeStyle: timeStyle)
+    }
 }

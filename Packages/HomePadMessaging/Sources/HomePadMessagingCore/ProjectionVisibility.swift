@@ -68,4 +68,10 @@ public enum ProjectionVisibilityPolicy {
         }
         return VisibilityDecision(visibility: .visible, reason: .ownerVerified)
     }
+
+    /// Whether this viewer may see the personal content of a companion owned by `ownerProfileID`.
+    /// It is the decision a personal app gets, for content that is personal whatever app shows it.
+    public static func showsPersonalContent(ownerProfileID: UUID?, viewer: ViewerContext) -> Bool {
+        decide(ownerProfileID: ownerProfileID, requiresPersonalContent: true, viewer: viewer).visibility == .visible
+    }
 }

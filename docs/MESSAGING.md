@@ -19,6 +19,7 @@ processed on the iPhone, and it works only while the iPhone is connected.
 | Wire format | `ProjectionCodec`, `ProjectionFrame`, `HostToHubMessage`, `HubToHostMessage` | both |
 | State | `ProjectionHostState` (companion), `ProjectionClientState` (hub) | pure reducers |
 | Who may see what | `ProjectionVisibilityPolicy` | hub |
+| Text summaries of a member's content | `ProjectedContextSummarizer`, `ProjectedContextSummary` | hub |
 | Services | `ProjectionHost` (companion), `ProjectionClient` (hub) | iOS |
 
 Messages on the wire:
@@ -123,6 +124,87 @@ message in the iPhone's memory and returns false with a dialog that says so.
    unknown or repeated parameter, an unknown kind, or another version is an error.
 7. **Conversation ids are digests.** The id of a conversation is a SHA-256 prefix of the sender's
    phone number, email, or name, so those do not appear in template ids or action ids.
+
+## Context summaries
+
+`ProjectionClient.contextSummaries(limit:maxTextLength:)` gives the active member's projected
+content as short plain text, for a caller that does not render templates (the app hands it to the
+Assistant as context items). The package does not know that caller.
+
+```swift
+public func contextSummaries(limit: Int = 8, maxTextLength: Int = 140) -> [ProjectedContextSummary]
+
+public struct ProjectedContextSummary: Equatable, Sendable, Identifiable {
+    public enum Kind: String, Sendable, CaseIterable { case message, calendarEvent, reminder, nowPlaying }
+    public let id: String
+    public let kind: Kind
+    public let ownerProfileID: UUID
+    public let title: String
+    public let detail: String
+}
+```
+
+**Who gets any.** The decision is `ProjectionClientState.contextSummaries(viewer:...)`. It reads
+only apps that `entries(viewer:)` lists as visible, and only from a companion for which
+`ProjectionVisibilityPolicy.showsPersonalContent` is true: the owner is the active member and
+`isPersonalContentUnlocked` is true. That is the decision the Messages app gets, made by the same
+`decide` function, and it is applied to Now Playing too, because here the track says what one
+member is doing. Everyone else gets an empty array:
+
+| In front of the hub | Result |
+|---|---|
+| The member, recognized by face, iPhone connected and projecting | their summaries |
+| The member's profile picked by hand | empty |
+| Another member | empty for this iPhone; their own iPhone's summaries if it is connected |
+| A guest or nobody | empty |
+| The member, but no iPhone connected, or every app turned off in Settings on the iPhone | empty |
+| A companion not linked to a member | empty |
+
+An app turned off in Settings on the iPhone is withdrawn, so the hub holds nothing of it.
+
+**What each kind is made from.** The kind comes from the template, not from the app id.
+
+| Kind | Template | `title` | `detail` | Left out |
+|---|---|---|---|---|
+| `message` | each row of a `conversationList` | the correspondent | the preview (the conversation's latest message) | the text, when Show Message Previews is off: `detail` is empty |
+| `calendarEvent` | `agenda` entry of kind `event` | event name | time, then location | events whose end has passed on the hub's clock |
+| `reminder` | `agenda` entry of kind `reminder` | reminder name | due time, then list name | completed reminders |
+| `nowPlaying` | `nowPlaying` with `isPlaying` | track | artist, then album | a paused or idle player |
+
+`list`, `grid`, `information`, and `conversation` templates give nothing. An open conversation's
+bubbles are not read, so the preview setting decides what message text can appear.
+
+**Order and limits.** Messages are newest first. Events and reminders are soonest first, undated
+ones last, so an overdue reminder comes before one due later. The kinds take turns (message,
+event, reminder, now playing, message, and so on), so a small `limit` keeps one of each before
+it takes a second of any. `maxTextLength` applies to `title` and to `detail` separately, counts
+characters as a person reads them (an emoji sequence is one), and clipped text ends with an
+ellipsis. Text is folded onto one line first. The same item on two screens or from two iPhones
+of one member is listed once.
+
+**Identity.** `id` is `<device id>/<app id>/<kind>/<item id>`: the conversation id, the agenda
+entry id, or the player's template id. It does not change when the text changes, so a new
+message in a conversation and a new track keep the id of the one before.
+
+**Times** are written in the hub's locale and time zone. `ProjectedContextTimeStyle` fixes them
+in tests.
+
+**Handling.** The strings are personal content that has left `MemoryOnly`. The type cannot be
+given a `Codable` conformance. Do not save or log them.
+
+Limits of the data:
+
+- The conversation list does not say who wrote the latest message. After the member replies
+  from the hub, the preview is their own reply, and `title` is still the correspondent.
+- Only messages the Shortcuts automation relayed exist. This is not the Messages inbox.
+- A repeating event appears once. All its occurrences share one id and the agenda keeps one.
+- The iPhone rebuilds its screens when its data changes and once a minute. When iOS suspends
+  the app there, the hub keeps the last copy until the link drops. Ended events are dropped
+  here on the hub's clock, and nothing else is corrected.
+- All-day dates are midnight in the iPhone's time zone. A hub in another time zone can show the
+  day before or after.
+- Now Playing covers the Music app only, and the hub learns of a change when the iPhone sends it.
+- Content from a disconnected iPhone stays until the next peer check, which runs every 2 seconds.
 
 ## Settings
 
