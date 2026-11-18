@@ -3,7 +3,7 @@ name: HomePad
 options:
   bundleIdPrefix: com.kevster
   deploymentTarget:
-    iOS: "26.0"
+    iOS: "27.0"
   createIntermediateGroups: true
   developmentLanguage: en
   groupSortPosition: top
@@ -91,6 +91,7 @@ targets:
           - $(HOMEPAD_APP_GROUP)
         com.apple.developer.group-session: true
         com.apple.developer.homekit: true
+        com.apple.developer.weatherkit: true
     dependencies:
       - package: HomePadCore
         product: HomePadCore
