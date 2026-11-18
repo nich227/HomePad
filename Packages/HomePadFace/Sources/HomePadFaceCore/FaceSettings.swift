@@ -8,6 +8,7 @@ public enum FaceSettings {
 
     public static let recognitionEnabled = SettingKey<Bool>("face.recognitionEnabled", default: true)
     public static let indeterminateLivenessPersonalizes = SettingKey<Bool>("face.indeterminateLivenessPersonalizes", default: true)
+    public static let touchIDUnlock = SettingKey<Bool>("face.touchIDUnlock", default: true)
     public static let lockDelaySeconds = SettingKey<Int>("face.lockDelaySeconds", default: 3)
     public static let nearDistance = SettingKey<String>("face.nearDistance", default: NearDistance.standard.rawValue)
 
@@ -39,6 +40,12 @@ public enum FaceSettings {
             title: "Personalize Without Depth Check",
             pane: pane,
             footer: "When the camera cannot confirm that a recognized face is a real person (no depth camera, or the person is too far away), the hub may still switch to that person's layout. Personal content stays locked either way. Turn this off to treat such a face as a guest."
+        ),
+        SettingDescriptor(
+            touchIDUnlock,
+            title: "Unlock with Touch ID",
+            pane: pane,
+            footer: "On an iPad without Face ID, after the camera recognizes a household member, any fingerprint enrolled on this iPad unlocks that member's personal content until they leave. Touch ID confirms that someone who can unlock this iPad is present, not which person. The iPad passcode is not accepted. Needs Personalize Without Depth Check to be on."
         ),
         SettingDescriptor(
             matchStrictness,

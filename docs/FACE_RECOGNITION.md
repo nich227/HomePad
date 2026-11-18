@@ -53,13 +53,14 @@ The result is one of four outcomes, and `HouseholdSessionDriver` applies it to `
 | Outcome | Meaning | Session call |
 |---|---|---|
 | `unlocked(id)` | Enrolled face, liveness established | `faceRecognized(profileID:proximity:at:)` |
-| `personalized(id)` | Enrolled face, liveness not established | `unknownFacePresent(proximity:)`, then `switchManually(to:)` |
+| `personalized(id)` | Enrolled face, liveness not established | `faceMatchedWithoutLiveness(profileID:proximity:)` |
 | `unknownPerson` | A face that is not enrolled, cannot be told apart, or looks like a spoof | `unknownFacePresent(proximity:)` |
 | `nobody` | No face for the lock delay | `presenceLost()` |
 
-`personalized` is the same as picking the profile by hand: the layout changes and personal content
-stays locked. When that person leaves, the driver locks the profile again. It leaves a profile
-that someone picked by hand alone.
+`personalized` changes the layout and keeps personal content locked. The session records it as a
+camera match, which is what Touch ID can later confirm (see "Touch ID as the second step"). When
+that person leaves, the session ends the camera match. A profile that someone picked by hand
+stays.
 
 ### Enrollment
 
@@ -98,6 +99,67 @@ passes that challenge, so by default it does not unlock anything.
 Liveness evidence belongs to one matched person. It is collected only on frames that match that
 person and is dropped when the matched person changes or everyone leaves. A real person standing
 next to a photo of someone else does not vouch for the photo.
+
+### Touch ID as the second step
+
+An iPad without a TrueDepth camera can match a face but cannot prove the face is live, so the
+match only personalizes. On such an iPad, Touch ID can finish the job in two steps:
+
+1. The camera picks who. A match without proven liveness becomes a camera match in the session.
+2. Touch ID confirms that someone enrolled on this iPad is present. That unlocks the
+   camera-matched member's personal content until they leave.
+
+**The limit.** Touch ID reports only that some enrolled finger matched. It cannot tell household
+members apart. So after the camera recognizes a member, any fingerprint enrolled on this iPad
+unlocks that member's personal content. It confirms that someone who can unlock this iPad is
+present, not which person. A photo of a member plus any enrolled finger is enough. Enroll only
+fingers of people who may see every member's personal content, or turn the setting off.
+
+`DeviceBiometricUnlockPolicy` offers the unlock only when all of these hold:
+
+| Condition | Why |
+|---|---|
+| "Unlock with Touch ID" is on | The household chose it |
+| The device's biometry is Touch ID | An iPad with Face ID hardware has a depth camera, and the liveness check decides there. With no biometrics there is nothing to ask |
+| No depth camera is in use | Same reason |
+| A camera match is waiting | A fingerprint cannot pick the member. It is never offered for a profile picked by hand |
+
+It also needs "Personalize Without Depth Check" to be on. With that setting off, a face without
+proven liveness is a guest, so no camera match exists to confirm.
+
+`DeviceBiometricUnlock.unlock()` runs one attempt:
+
+- It prompts with the biometrics-only policy and hides the passcode fallback. The iPad passcode
+  does not unlock a member's content here.
+- It uses a new `LAContext` each time, so an earlier success is never reused.
+- After the prompt returns, it checks that the same camera match is still waiting. If the person
+  left, someone else was matched, or someone switched by hand while the prompt was up, an
+  accepted finger unlocks nothing.
+
+| Outcome | What happens |
+|---|---|
+| `confirmed` | The member's personal content unlocks until they leave |
+| `failed` | Nothing changes. The button shows "Fingerprint not recognized" and can be tried again |
+| `canceled` | Nothing changes and nothing is shown |
+| `lockedOut` | Nothing changes. Touch ID is off until the iPad is unlocked with its passcode, and the unlock is not offered until then |
+| `notAvailable` | Nothing changes. No prompt was shown, or the camera match was gone when it returned |
+
+How long a confirmation lasts:
+
+- It ends when the member leaves, when a stranger takes their place, and when another member is
+  matched. It never carries over to another member.
+- A single frame that matches a different enrolled member ends it too, even though the stabilizer
+  keeps showing the first member. The fingerprint vouched for whoever stood there before.
+- A single frame with no face, an unusable face, or no match does not end it. The stabilizer
+  absorbs those frames and the session is not told.
+
+After a confirmation `service.lastDecision` still reads `.personalized`, because the camera alone
+has not proven anything. Read `session.isPersonalContentUnlocked` to decide what to show.
+`RecognitionIndicatorView` shows a Touch ID glyph next to the member's name while the unlock is
+offered, when it is given the `DeviceBiometricUnlock` object.
+
+The simulator cannot exercise this. It has no camera, so no camera match ever exists and the
+unlock is never offered.
 
 ### Power
 
@@ -171,6 +233,9 @@ State this to users the way it is stated here.
   can produce a match. That is why a match without established liveness only personalizes and
   never unlocks personal content. The setting "Personalize Without Depth Check" turns even that
   off.
+- **Touch ID does not identify the member.** On an iPad without Face ID hardware, a camera match
+  plus any fingerprint enrolled on the iPad unlocks that member's personal content. A photo of the
+  member and an enrolled finger are enough. See "Touch ID as the second step".
 - **The depth check covers flat spoofs only.** It separates flat surfaces from surfaces with
   face-like relief. It does not detect a mask, a sculpted face, or a curved print. It was written
   from first principles and has not been tested against real spoof attempts on a device.
@@ -291,6 +356,7 @@ bundle.
 |---|---|---|---|---|
 | `face.recognitionEnabled` | Recognize Faces | Toggle | On | |
 | `face.indeterminateLivenessPersonalizes` | Personalize Without Depth Check | Toggle | On | |
+| `face.touchIDUnlock` | Unlock with Touch ID | Toggle | On | |
 | `face.matchStrictness` | Match Strictness | Choice | `standard` | `relaxed`, `standard`, `strict` |
 | `face.lockDelaySeconds` | Lock After Face Is Lost | Choice | `3` | `1`, `3`, `5`, `10`, `30` |
 | `face.nearDistance` | Show More Detail When | Choice | `standard` | `closer`, `standard`, `farther` |
@@ -305,6 +371,12 @@ This section describes what the code does. It is not legal advice.
 **Camera usage string.** The app's `Info.plist` needs `NSCameraUsageDescription`. Say what the
 camera is for, for example: "HomePad uses the front camera to recognize household members who set
 up face recognition. Images are analyzed on this iPad and are not saved or sent anywhere."
+
+**Touch ID needs no usage string.** `NSFaceIDUsageDescription` is for Face ID only: the
+`LAContext.h` header describes it as the message shown "when the app is trying to use Face ID for
+the first time", and names no key for Touch ID. This package never evaluates a Face ID policy. On
+an iPad with Face ID it only calls `canEvaluatePolicy` to learn the sensor type and then does not
+offer the unlock.
 
 **On-device only.** Frames, crops, embeddings, and templates stay on the device. The package has no
 network code. Under Apple's definition, data that is processed only on the device is not
@@ -353,6 +425,7 @@ let session = HouseholdSession(store: try FileProfileStore.applicationSupport())
 
 let embedder = await FaceEmbedderFactory.loadDefault()
 let faces = FaceRecognitionService(session: session, settings: settings, embedder: embedder)
+let touchID = DeviceBiometricUnlock(session: session, settings: settings, service: faces)
 await faces.start()
 ```
 
@@ -360,8 +433,10 @@ await faces.start()
   app's foreground state without further calls. The first call shows the system camera prompt.
 - Call `settings.refresh()` when the scene becomes active, so a change made in Settings is picked
   up.
-- `PeopleSetupView(session:service:)` is the setup screen. `RecognitionIndicatorView(service:session:)`
-  is the status capsule. `FaceEnrollmentView(profile:service:onFinish:)` is presented by
+- `DeviceBiometricUnlockButton(unlock:)` is the Touch ID button. It shows only while
+  `touchID.isOffered` is true. Other views can read `isOffered` and call `unlock()` themselves.
+- `PeopleSetupView(session:service:)` is the setup screen.
+  `RecognitionIndicatorView(service:session:unlock:)` is the status capsule. `FaceEnrollmentView(profile:service:onFinish:)` is presented by
   `PeopleSetupView` and can also be presented directly.
 
 ## Calibration
@@ -389,6 +464,8 @@ these on the target iPad, in the room where it will stand:
   and has not been checked in all four interface orientations.
 - The mirror preview, the preview frame rate, and the direction of `facePosition` have not been
   seen on a device.
+- The Touch ID unlock has not run on a device. Its decision flow is unit-tested with a fake
+  prompt. The real prompt, the hidden fallback button, and the lockout path are untested.
 
 ## Sources
 
@@ -396,3 +473,4 @@ these on the target iPad, in the room where it will stand:
 - `docs/FACE_MODEL.md` and `HomePad/Models/NOTICE.md` in this repository, for the SFace contract, thresholds, and license
 - Vision header `VNObservation.h` in the iOS 27.2 SDK, for the yaw, pitch, roll, and capture quality definitions
 - AVFoundation headers `AVCaptureSession.h` and `AVCaptureDevice.h` in the iOS 27.2 SDK, for multitasking camera access and the rotation coordinator
+- LocalAuthentication headers `LAContext.h`, `LAError.h`, and `LAPublicDefines.h` in the iOS 27.2 SDK, for the biometrics-only policy, the fallback button, the error codes, and `NSFaceIDUsageDescription`

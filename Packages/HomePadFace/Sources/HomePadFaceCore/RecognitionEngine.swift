@@ -57,7 +57,12 @@ public struct RecognitionUpdate: Equatable, Sendable {
     public let isFacePresent: Bool
     /// Liveness of the recognized member, when there is one.
     public let liveness: LivenessAssessment?
-    /// Whether the outcome or proximity differs from the previous update.
+    /// True when this frame matched a different enrolled member than the one being recognized.
+    /// Anything that vouched for the recognized member, such as a device biometric
+    /// confirmation, no longer counts, even though the outcome may stay the same.
+    public let matchedAnotherMember: Bool
+    /// Whether the session needs to hear about this update: the outcome or proximity differs
+    /// from the previous update, or `matchedAnotherMember` is set.
     public let didChange: Bool
 
     public init(
@@ -65,12 +70,14 @@ public struct RecognitionUpdate: Equatable, Sendable {
         proximity: Proximity,
         isFacePresent: Bool,
         liveness: LivenessAssessment?,
+        matchedAnotherMember: Bool = false,
         didChange: Bool
     ) {
         self.outcome = outcome
         self.proximity = proximity
         self.isFacePresent = isFacePresent
         self.liveness = liveness
+        self.matchedAnotherMember = matchedAnotherMember
         self.didChange = didChange
     }
 
@@ -128,7 +135,11 @@ public struct RecognitionEngine: Sendable {
         }
         proximity.update(sizeFraction: face.sizeFraction)
         let identity = identity(of: face, templates: templates)
+        var matchedAnotherMember = false
         if case .matched(let profileID) = identity {
+            if case .recognized(let recognized) = stabilizer.decision, recognized != profileID {
+                matchedAnotherMember = true
+            }
             if profileID != livenessSubject {
                 liveness.reset()
                 livenessSubject = profileID
@@ -136,7 +147,7 @@ public struct RecognitionEngine: Sendable {
             liveness.ingest(depth: face.depth, yaw: face.pose.yaw, eyeOpenness: face.eyeOpenness, at: frame.timestamp)
         }
         stabilizer.ingest(identity, at: frame.timestamp)
-        return publish(isFacePresent: true, at: frame.timestamp)
+        return publish(isFacePresent: true, at: frame.timestamp, matchedAnotherMember: matchedAnotherMember)
     }
 
     private func identity(of face: FaceObservationSample, templates: [FaceTemplate]) -> FrameIdentity {
@@ -155,7 +166,11 @@ public struct RecognitionEngine: Sendable {
         proximity.reset()
     }
 
-    private mutating func publish(isFacePresent: Bool, at timestamp: TimeInterval) -> RecognitionUpdate {
+    private mutating func publish(
+        isFacePresent: Bool,
+        at timestamp: TimeInterval,
+        matchedAnotherMember: Bool = false
+    ) -> RecognitionUpdate {
         var assessment: LivenessAssessment?
         let outcome: RecognitionOutcome
         switch stabilizer.decision {
@@ -181,47 +196,37 @@ public struct RecognitionEngine: Sendable {
             proximity: proximity.proximity,
             isFacePresent: isFacePresent,
             liveness: assessment,
-            didChange: outcome != latest.outcome || proximity.proximity != latest.proximity
+            matchedAnotherMember: matchedAnotherMember,
+            didChange: outcome != latest.outcome || proximity.proximity != latest.proximity || matchedAnotherMember
         )
         return latest
     }
 }
 
-/// Applies recognition outcomes to the household session.
+/// Applies recognition outcomes to the household session. The session itself ends what the
+/// camera started when the person leaves and keeps a profile that someone picked by hand.
 @MainActor
 public final class HouseholdSessionDriver {
-    /// The member this driver personalized without unlocking. Only that activation is undone
-    /// when the person leaves, so a switch made by hand is left alone.
-    public private(set) var personalizedProfileID: UUID?
-
     public init() {}
 
     public func apply(_ update: RecognitionUpdate, to session: HouseholdSession, at date: Date) {
+        // A member removed while their template was still loaded is a stranger to the session.
+        let isMember = update.outcome.profileID.map { id in session.profiles.contains { $0.id == id } } ?? false
         switch update.outcome {
-        case .unlocked(let profileID):
-            personalizedProfileID = nil
+        case .unlocked(let profileID) where isMember:
             session.faceRecognized(profileID: profileID, proximity: update.proximity, at: date)
-        case .personalized(let profileID):
-            session.unknownFacePresent(proximity: update.proximity)
-            // The switch fails only when the member was removed while their template was loaded.
-            if (try? session.switchManually(to: profileID)) != nil {
-                personalizedProfileID = profileID
-            } else {
-                clearPersonalization(in: session)
+        case .personalized(let profileID) where isMember:
+            // The session keeps a device biometric confirmation across repeated matches of the
+            // same member. A frame that matched someone else ends it: the fingerprint vouched for
+            // whoever stood there before.
+            if update.matchedAnotherMember, session.isConfirmedByDeviceBiometrics {
+                session.unknownFacePresent(proximity: update.proximity)
             }
-        case .unknownPerson:
+            session.faceMatchedWithoutLiveness(profileID: profileID, proximity: update.proximity)
+        case .unlocked, .personalized, .unknownPerson:
             session.unknownFacePresent(proximity: update.proximity)
-            clearPersonalization(in: session)
         case .nobody:
             session.presenceLost()
-            clearPersonalization(in: session)
         }
-    }
-
-    private func clearPersonalization(in session: HouseholdSession) {
-        if let personalizedProfileID, session.activation == .manual(personalizedProfileID) {
-            session.lock()
-        }
-        personalizedProfileID = nil
     }
 }

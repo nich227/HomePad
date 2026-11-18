@@ -5,14 +5,19 @@ import HomePadFaceCore
 import SwiftUI
 
 /// A small capsule that says who the hub sees: a recognized member, a member whose personal
-/// content is locked, a guest, nobody, or that the camera is off.
+/// content is locked, a member who can unlock with Touch ID, a guest, nobody, or that the camera
+/// is off.
 public struct RecognitionIndicatorView: View {
     private let service: FaceRecognitionService
     private let session: HouseholdSession
+    private let unlock: DeviceBiometricUnlock?
 
-    public init(service: FaceRecognitionService, session: HouseholdSession) {
+    /// - Parameter unlock: pass it to show when a camera match is waiting for Touch ID. Without
+    ///   it that state looks like any other locked member.
+    public init(service: FaceRecognitionService, session: HouseholdSession, unlock: DeviceBiometricUnlock? = nil) {
         self.service = service
         self.session = session
+        self.unlock = unlock
     }
 
     private enum Presentation: Equatable {
@@ -20,6 +25,8 @@ public struct RecognitionIndicatorView: View {
         case nobody
         case guest
         case locked(HouseholdProfile)
+        /// The camera matched this member and Touch ID can unlock their personal content.
+        case awaitingTouchID(HouseholdProfile)
         case recognized(HouseholdProfile)
     }
 
@@ -31,7 +38,13 @@ public struct RecognitionIndicatorView: View {
         case .unknownPerson:
             return .guest
         case .personalized(let id):
-            return session.profiles.first { $0.id == id }.map(Presentation.locked) ?? .guest
+            guard let profile = session.profiles.first(where: { $0.id == id }) else { return .guest }
+            // A camera match that Touch ID confirmed is unlocked, although the camera alone still
+            // reports it as unproven.
+            if session.isConfirmedByDeviceBiometrics, session.activation.profileID == id {
+                return .recognized(profile)
+            }
+            return unlock?.isOffered == true ? .awaitingTouchID(profile) : .locked(profile)
         case .unlocked(let id):
             return session.profiles.first { $0.id == id }.map(Presentation.recognized) ?? .guest
         }
@@ -71,6 +84,12 @@ public struct RecognitionIndicatorView: View {
             HomePadAnimationView(authored: .guest)
         case .locked(let profile):
             HomePadAnimationView(authored: .locked, tint: Color(profile.tint))
+        case .awaitingTouchID(let profile):
+            Image(systemName: "touchid")
+                .resizable()
+                .scaledToFit()
+                .padding(2)
+                .foregroundStyle(Color(profile.tint))
         case .recognized(let profile):
             ZStack {
                 HomePadAnimationView(authored: .presencePulse, tint: Color(profile.tint))
@@ -87,7 +106,7 @@ public struct RecognitionIndicatorView: View {
         switch presentation {
         case .cameraOff, .nobody: nil
         case .guest: String(localized: "Guest")
-        case .locked(let profile), .recognized(let profile): profile.name
+        case .locked(let profile), .awaitingTouchID(let profile), .recognized(let profile): profile.name
         }
     }
 
@@ -97,6 +116,8 @@ public struct RecognitionIndicatorView: View {
         case .nobody: String(localized: "No one is in front of the hub")
         case .guest: String(localized: "Guest. No household member recognized.")
         case .locked(let profile): String(localized: "\(profile.name). Personal content is locked.")
+        case .awaitingTouchID(let profile):
+            String(localized: "\(profile.name). Personal content is locked. Unlock with Touch ID.")
         case .recognized(let profile): String(localized: "\(profile.name) recognized")
         }
     }

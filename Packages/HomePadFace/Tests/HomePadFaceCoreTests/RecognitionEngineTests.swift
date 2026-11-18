@@ -146,6 +146,38 @@ import Testing
         #expect(try run(&engine, degrees: 0, count: 2, from: 1.1, depth: faceLikeDepth()) == [.personalized(alice), .unlocked(alice)])
     }
 
+    @Test func process_whenOneFrameMatchesAnotherMemberWithoutDepth_thenOutcomeHoldsAndUpdateIsFlagged() throws {
+        var engine = engine()
+        _ = try run(&engine, degrees: 0, count: 3, from: 0)
+        #expect(engine.latest.outcome == .personalized(alice))
+        #expect(!engine.latest.matchedAnotherMember)
+        let stray = engine.process(try frame(at: 1, degrees: 90), templates: try templates())
+        #expect(stray.outcome == .personalized(alice))
+        #expect(stray.matchedAnotherMember)
+        #expect(stray.didChange)
+        let back = engine.process(try frame(at: 1.1, degrees: 0), templates: try templates())
+        #expect(back.outcome == .personalized(alice))
+        #expect(!back.matchedAnotherMember)
+        #expect(!back.didChange)
+    }
+
+    @Test func process_whenOneFrameMatchesNobody_thenNothingIsFlaggedOrReported() throws {
+        var engine = engine()
+        _ = try run(&engine, degrees: 0, count: 3, from: 0)
+        let frames = [
+            try frame(at: 1, degrees: 45),
+            try frame(at: 1.1, degrees: nil),
+            FaceFrameObservation.empty(at: 1.2),
+            try frame(at: 1.3, degrees: 0),
+        ]
+        for frame in frames {
+            let update = engine.process(frame, templates: try templates())
+            #expect(update.outcome == .personalized(alice))
+            #expect(!update.matchedAnotherMember)
+            #expect(!update.didChange)
+        }
+    }
+
     @Test func process_whenFaceLeavesPastTheLockDelay_thenNobodyAndEvidenceIsDropped() throws {
         var engine = engine()
         _ = try run(&engine, degrees: 0, count: 3, from: 0, depth: faceLikeDepth())
@@ -190,8 +222,17 @@ import Testing
         bob = try session.addProfile(name: "Bob").id
     }
 
-    private func update(_ outcome: RecognitionOutcome, _ proximity: Proximity = .near) -> RecognitionUpdate {
-        RecognitionUpdate(outcome: outcome, proximity: proximity, isFacePresent: true, liveness: nil, didChange: true)
+    private func update(_ outcome: RecognitionOutcome, _ proximity: Proximity = .near, matchedAnotherMember: Bool = false) -> RecognitionUpdate {
+        RecognitionUpdate(
+            outcome: outcome, proximity: proximity, isFacePresent: true, liveness: nil,
+            matchedAnotherMember: matchedAnotherMember, didChange: true
+        )
+    }
+
+    private func confirmAlice() {
+        driver.apply(update(.personalized(alice)), to: session, at: date)
+        #expect(session.confirmWithDeviceBiometrics(at: date))
+        #expect(session.isPersonalContentUnlocked)
     }
 
     @Test func apply_whenUnlocked_thenSessionIsFaceActivatedAndPersonalContentUnlocks() {
@@ -200,16 +241,18 @@ import Testing
         #expect(session.isPersonalContentUnlocked)
         #expect(session.proximity == .near)
         #expect(session.isSomeonePresent)
-        #expect(driver.personalizedProfileID == nil)
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(!session.canConfirmWithDeviceBiometrics)
     }
 
-    @Test func apply_whenPersonalized_thenSessionSwitchesWithoutUnlocking() {
+    @Test func apply_whenPersonalized_thenCameraMatchWaitsForConfirmationWithoutUnlocking() {
         driver.apply(update(.personalized(alice), .far), to: session, at: date)
         #expect(session.activation == .manual(alice))
         #expect(!session.isPersonalContentUnlocked)
         #expect(session.isSomeonePresent)
         #expect(session.proximity == .far)
-        #expect(driver.personalizedProfileID == alice)
+        #expect(session.cameraMatchedProfileID == alice)
+        #expect(session.canConfirmWithDeviceBiometrics)
     }
 
     @Test func apply_whenUnlockIsDowngradedToPersonalized_thenPersonalContentLocks() {
@@ -217,21 +260,64 @@ import Testing
         driver.apply(update(.personalized(alice)), to: session, at: date)
         #expect(session.activation == .manual(alice))
         #expect(!session.isPersonalContentUnlocked)
+        #expect(session.canConfirmWithDeviceBiometrics)
     }
 
-    @Test func apply_whenPersonalizedMemberLeaves_thenSessionLocks() {
+    @Test func apply_whenConfirmedMemberIsMatchedAgain_thenConfirmationHolds() {
+        confirmAlice()
+        driver.apply(update(.personalized(alice), .far), to: session, at: date)
+        #expect(session.isPersonalContentUnlocked)
+        #expect(session.isConfirmedByDeviceBiometrics)
+        #expect(session.proximity == .far)
+    }
+
+    @Test func apply_whenAFrameMatchedAnotherMember_thenDeviceBiometricConfirmationIsDropped() {
+        confirmAlice()
+        driver.apply(update(.personalized(alice), matchedAnotherMember: true), to: session, at: date)
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(session.activation == .manual(alice))
+        #expect(session.canConfirmWithDeviceBiometrics)
+    }
+
+    @Test func apply_whenAFrameMatchedAnotherMemberWithoutAConfirmation_thenCameraMatchStaysAsItWas() {
+        driver.apply(update(.personalized(alice)), to: session, at: date)
+        driver.apply(update(.personalized(alice), matchedAnotherMember: true), to: session, at: date)
+        #expect(session.activation == .manual(alice))
+        #expect(session.canConfirmWithDeviceBiometrics)
+    }
+
+    @Test func apply_whenAnotherMemberIsMatchedAfterAConfirmation_thenConfirmationDoesNotCarryOver() {
+        confirmAlice()
+        driver.apply(update(.personalized(bob)), to: session, at: date)
+        #expect(session.activation == .manual(bob))
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(session.cameraMatchedProfileID == bob)
+    }
+
+    @Test func apply_whenConfirmedMemberIsReplacedByAStranger_thenSessionLocks() {
+        confirmAlice()
+        driver.apply(update(.unknownPerson), to: session, at: date)
+        #expect(session.activation == .none)
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(!session.canConfirmWithDeviceBiometrics)
+        #expect(session.isSomeonePresent)
+    }
+
+    @Test func apply_whenCameraMatchedMemberLeaves_thenSessionLocks() {
         driver.apply(update(.personalized(alice)), to: session, at: date)
         driver.apply(update(.nobody, .far), to: session, at: date)
         #expect(session.activation == .none)
         #expect(!session.isSomeonePresent)
-        #expect(driver.personalizedProfileID == nil)
+        #expect(session.cameraMatchedProfileID == nil)
     }
 
-    @Test func apply_whenPersonalizedMemberIsReplacedByAStranger_thenSessionLocks() {
-        driver.apply(update(.personalized(alice)), to: session, at: date)
-        driver.apply(update(.unknownPerson), to: session, at: date)
+    @Test func apply_whenConfirmedMemberLeaves_thenSessionLocks() {
+        confirmAlice()
+        driver.apply(update(.nobody, .far), to: session, at: date)
         #expect(session.activation == .none)
-        #expect(session.isSomeonePresent)
+        #expect(!session.isConfirmedByDeviceBiometrics)
     }
 
     @Test func apply_whenUnlockedMemberIsReplacedByAStranger_thenPersonalContentLocks() {
@@ -241,41 +327,56 @@ import Testing
         #expect(!session.isPersonalContentUnlocked)
     }
 
-    @Test func apply_whenProfileWasPickedByHand_thenLeavingDoesNotUndoIt() throws {
+    @Test func apply_whenProfileWasPickedByHand_thenLeavingDoesNotUndoItAndItCannotBeConfirmed() throws {
         try session.switchManually(to: bob)
+        #expect(!session.canConfirmWithDeviceBiometrics)
         driver.apply(update(.unknownPerson), to: session, at: date)
         driver.apply(update(.nobody), to: session, at: date)
         #expect(session.activation == .manual(bob))
+        #expect(!session.canConfirmWithDeviceBiometrics)
     }
 
-    @Test func apply_whenSomeoneSwitchedByHandAfterFacePersonalization_thenLeavingKeepsTheirChoice() throws {
+    @Test func apply_whenSomeoneSwitchedByHandAfterACameraMatch_thenLeavingKeepsTheirChoice() throws {
         driver.apply(update(.personalized(alice)), to: session, at: date)
         try session.switchManually(to: bob)
         driver.apply(update(.nobody), to: session, at: date)
         #expect(session.activation == .manual(bob))
-        #expect(driver.personalizedProfileID == nil)
     }
 
-    @Test func apply_whenPersonalizedMemberWasRemoved_thenSessionLocks() {
-        driver.apply(update(.personalized(alice)), to: session, at: date)
+    @Test func apply_whenMatchedMemberWasRemoved_thenTreatedAsAStranger() {
+        driver.apply(update(.unlocked(alice)), to: session, at: date)
         driver.apply(update(.personalized(UUID())), to: session, at: date)
         #expect(session.activation == .none)
-        #expect(driver.personalizedProfileID == nil)
+        driver.apply(update(.unlocked(alice)), to: session, at: date)
+        driver.apply(update(.unlocked(UUID())), to: session, at: date)
+        #expect(session.activation == .none)
+        #expect(session.isSomeonePresent)
     }
 
-    @Test func apply_whenPersonalizedThenUnlocked_thenFaceActivationReplacesManual() {
+    @Test func apply_whenPersonalizedThenUnlocked_thenFaceActivationReplacesTheCameraMatch() {
         driver.apply(update(.personalized(alice)), to: session, at: date)
         driver.apply(update(.unlocked(alice)), to: session, at: date)
         #expect(session.activation == .face(alice, at: date))
-        #expect(driver.personalizedProfileID == nil)
+        #expect(session.cameraMatchedProfileID == nil)
     }
 }
 
 @Suite struct FaceSettingsTests {
     @Test func descriptors_whenListed_thenEveryKeyIsPrefixedAndInTheFacePane() {
-        #expect(FaceSettings.descriptors.count == 5)
+        #expect(FaceSettings.descriptors.count == 6)
         #expect(FaceSettings.descriptors.allSatisfy { $0.name.hasPrefix("face.") && $0.pane == "Face Recognition" })
-        #expect(Set(FaceSettings.descriptors.map(\.name)).count == 5)
+        #expect(Set(FaceSettings.descriptors.map(\.name)).count == 6)
+    }
+
+    @Test func descriptors_whenTouchIDUnlock_thenToggleOnByDefaultWithTheLimitInTheFooter() throws {
+        let row = try #require(FaceSettings.descriptors.first { $0.name == "face.touchIDUnlock" })
+        #expect(row.name == FaceSettings.touchIDUnlock.name)
+        #expect(row.title == "Unlock with Touch ID")
+        #expect(row.control == .toggle)
+        #expect(row.defaultValue == .bool(true))
+        let footer = try #require(row.footer)
+        #expect(footer.contains("any fingerprint enrolled on this iPad"))
+        #expect(footer.contains("not which person"))
     }
 
     @Test func descriptors_whenChoice_thenDefaultIsOneOfTheOptions() throws {
