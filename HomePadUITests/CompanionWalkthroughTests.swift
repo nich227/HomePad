@@ -1,0 +1,39 @@
+import XCTest
+
+/// Walks the iPhone companion's tabs and saves a screenshot of each.
+@MainActor
+final class CompanionWalkthroughTests: WalkthroughCase {
+    override func setUp() async throws {
+        try await super.setUp()
+        try XCTSkipIf(isPad, "The companion walkthrough runs on an iPhone.")
+        XCUIDevice.shared.orientation = .portrait
+    }
+
+    func testA_whenLaunchedOnPhone_thenEveryTabAppears() throws {
+        launch()
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 60), "the companion's tab bar did not appear")
+        note("prompts answered at launch: \(allowSystemPrompts())")
+        pause(1)
+        snapshot("p10-companion-hub-not-reachable")
+        for (index, title) in ["Beam", "Apps", "People"].enumerated() {
+            let tab = tabs.buttons[title]
+            XCTAssertTrue(tab.waitForExistence(timeout: 5), "the \(title) tab is missing")
+            tab.tap()
+            pause(1.5)
+            allowSystemPrompts(wait: 1)
+            snapshot("p1\(index + 1)-companion-\(slug(title))")
+        }
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
+    func testB_whenHubSummaryArrives_thenHubTabDescribesIt() throws {
+        launch(Hook.sample)
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 60))
+        allowSystemPrompts(wait: 1)
+        pause(1.5)
+        snapshot("p20-companion-hub-summary")
+        XCTAssertTrue(app.staticTexts["On the Hub"].exists || app.staticTexts["ON THE HUB"].exists, "the hub summary is missing")
+    }
+}
