@@ -3,10 +3,9 @@
 # does not wait for itself.
 homepad_lock() {
   [[ -n "${HOMEPAD_LOCK_HELD:-}" ]] && return 0
-  local dir="$1/build/.lock"
+  local dir="$1/build/.lock" owner
   mkdir -p "$1/build"
   while ! mkdir "$dir" 2>/dev/null; do
-    local owner
     owner=$(cat "$dir/pid" 2>/dev/null)
     # A lock whose owner is gone was left by a killed run.
     if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
