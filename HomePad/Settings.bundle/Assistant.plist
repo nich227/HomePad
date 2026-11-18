@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>FooterText</key>
+			<string>The Assistant answers questions and controls this hub with the language model on this device. It opens only when you ask for it on the screen and never listens for a wake word. HomePad needs Apple Intelligence turned on whether or not the Assistant is on.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>assistant.enabled</string>
+			<key>Title</key>
+			<string>Assistant</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, the Assistant starts listening as soon as it opens. When off, it waits for you to type or tap the microphone. Speech is recognized on this device and the microphone is used only while the Assistant shows that it is listening.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>assistant.listenOnOpen</string>
+			<key>Title</key>
+			<string>Listen When Opened</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>assistant.speakAnswers</string>
+			<key>Title</key>
+			<string>Speak Answers</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, the Assistant may use your calendar events, your reminders, and what is playing on your iPhone in its answers, and only while your face has unlocked personal content on this hub. Guests never get personal context.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>assistant.usePersonalContext</string>
+			<key>Title</key>
+			<string>Use Personal Context</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>How long the Assistant stays on screen after it answers and nobody touches it.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>30</integer>
+			<key>Key</key>
+			<string>assistant.autoDismissSeconds</string>
+			<key>Title</key>
+			<string>Close Automatically</string>
+			<key>Titles</key>
+			<array>
+				<string>Never</string>
+				<string>After 15 Seconds</string>
+				<string>After 30 Seconds</string>
+				<string>After 1 Minute</string>
+				<string>After 2 Minutes</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>0</integer>
+				<integer>15</integer>
+				<integer>30</integer>
+				<integer>60</integer>
+				<integer>120</integer>
+			</array>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>Assistant</string>
+	<key>Title</key>
+	<string>Assistant</string>
+</dict>
+</plist>

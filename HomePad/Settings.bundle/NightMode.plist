@@ -6,7 +6,7 @@
 	<array>
 		<dict>
 			<key>FooterText</key>
-			<string>Dims the hub to a red clock at night. Tap the screen to wake it for a moment.</string>
+			<string>Turns everything on the hub red on black and dims the screen at night. You can also switch it for one evening from the control center on the hub.</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>

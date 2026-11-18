@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectCalendar</string>
+			<key>Title</key>
+			<string>Show Calendar on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectReminders</string>
+			<key>Title</key>
+			<string>Show Reminders on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>Set these on your iPhone. They choose which of this iPhone's apps appear on a nearby HomePad. Calendar and Reminders appear only while HomePad recognizes your face.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.projectNowPlaying</string>
+			<key>Title</key>
+			<string>Show Now Playing on HomePad</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When off, this device neither sends nor shows household notes.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.householdNotes</string>
+			<key>Title</key>
+			<string>Household Notes</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, the HomePad app in Messages offers pages you recently sent to a HomePad.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>messaging.suggestRecentPages</string>
+			<key>Title</key>
+			<string>Suggest Recent Pages in Messages</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+	</array>
+	<key>StringsTable</key>
+	<string>iPhoneAppsNotes</string>
+	<key>Title</key>
+	<string>iPhone Apps &amp; Notes</string>
+</dict>
+</plist>

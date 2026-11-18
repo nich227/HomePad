@@ -32,6 +32,16 @@
 			<key>DefaultValue</key>
 			<true/>
 			<key>Key</key>
+			<string>ui.face.memories.enabled</string>
+			<key>Title</key>
+			<string>Memories</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
 			<string>ui.face.weather.enabled</string>
 			<key>Title</key>
 			<string>Weather</string>

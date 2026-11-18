@@ -1,3 +1,4 @@
+import HomePadAssistantCore
 import HomePadBeamCore
 import HomePadCore
 import HomePadFaceCore
@@ -18,6 +19,7 @@ public enum SettingsCatalog {
         + BeamSettings.descriptors
         + MessagingSettings.descriptors
         + UISettings.descriptors
+        + AssistantSettings.descriptors
 
     /// Preferences that extensions read. The app copies their values into the app group's
     /// defaults, because an extension cannot see the app's own defaults.

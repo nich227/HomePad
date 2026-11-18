@@ -114,7 +114,7 @@
 		</dict>
 		<dict>
 			<key>FooterText</key>
-			<string>How close a person must be before the hub switches from the far layout to the near layout.</string>
+			<string>The hub shows the most detail to someone within arm's reach, less at mid range, and the least from across the room. Standard puts arm's reach at about 1 m (3 ft) and across the room at about 2.5 m (8 ft). Closer moves both about a quarter nearer to the screen, and Farther about a third farther away. Distances are estimates.</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
@@ -124,12 +124,12 @@
 			<key>Key</key>
 			<string>face.nearDistance</string>
 			<key>Title</key>
-			<string>Show More Detail When</string>
+			<string>Detail Distance</string>
 			<key>Titles</key>
 			<array>
-				<string>Very close</string>
-				<string>Close</string>
-				<string>Across the room</string>
+				<string>Closer</string>
+				<string>Standard</string>
+				<string>Farther</string>
 			</array>
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>

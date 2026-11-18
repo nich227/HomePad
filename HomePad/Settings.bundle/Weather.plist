@@ -5,6 +5,32 @@
 	<key>PreferenceSpecifiers</key>
 	<array>
 		<dict>
+			<key>FooterText</key>
+			<string>Current Location asks for Location Services the first time weather is shown. Custom uses the city and coordinates below.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<string>current</string>
+			<key>Key</key>
+			<string>ui.weather.location</string>
+			<key>Title</key>
+			<string>Location</string>
+			<key>Titles</key>
+			<array>
+				<string>Current Location</string>
+				<string>Custom</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<string>current</string>
+				<string>custom</string>
+			</array>
+		</dict>
+		<dict>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
@@ -38,7 +64,7 @@
 		</dict>
 		<dict>
 			<key>FooterText</key>
-			<string>HomePad does not use Location Services. Enter the hub's coordinates in decimal degrees to show weather.</string>
+			<string>For Custom, enter the coordinates in decimal degrees.</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>

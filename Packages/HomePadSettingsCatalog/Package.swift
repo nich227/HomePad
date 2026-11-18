@@ -3,7 +3,7 @@ import PackageDescription
 
 // Every package that declares settings. The catalog links only their Core targets, because the
 // descriptors live there.
-let features = ["HomePadKiosk", "HomePadFace", "HomePadBeam", "HomePadMessaging", "HomePadUI"]
+let features = ["HomePadKiosk", "HomePadFace", "HomePadBeam", "HomePadMessaging", "HomePadUI", "HomePadAssistant"]
 
 let package = Package(
     name: "HomePadSettingsCatalog",

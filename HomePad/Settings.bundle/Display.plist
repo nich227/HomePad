@@ -6,28 +6,60 @@
 	<array>
 		<dict>
 			<key>FooterText</key>
-			<string>Square centers the face on black. Fill adds a second column beside it.</string>
+			<string>Fill lays every face and app out for the whole screen. Square centers a square on black.</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>
 		<dict>
 			<key>DefaultValue</key>
-			<string>square</string>
+			<string>fill</string>
 			<key>Key</key>
 			<string>ui.display.canvas</string>
 			<key>Title</key>
 			<string>Screen Layout</string>
 			<key>Titles</key>
 			<array>
+				<string>Fill the Screen</string>
 				<string>Square (like HomeView)</string>
-				<string>Fill the screen</string>
 			</array>
 			<key>Type</key>
 			<string>PSMultiValueSpecifier</string>
 			<key>Values</key>
 			<array>
-				<string>square</string>
 				<string>fill</string>
+				<string>square</string>
+			</array>
+		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>With no touch for this long, the Home Screen and apps go back to the face. An app stays while something is playing.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>120</integer>
+			<key>Key</key>
+			<string>ui.display.idleReturn</string>
+			<key>Title</key>
+			<string>Return to Face After</string>
+			<key>Titles</key>
+			<array>
+				<string>30 Seconds</string>
+				<string>1 Minute</string>
+				<string>2 Minutes</string>
+				<string>5 Minutes</string>
+				<string>Never</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>30</integer>
+				<integer>60</integer>
+				<integer>120</integer>
+				<integer>300</integer>
+				<integer>0</integer>
 			</array>
 		</dict>
 		<dict>
