@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>PayloadContent</key>
+	<array>
+		<dict>
+			<key>PayloadType</key>
+			<string>com.apple.applicationaccess</string>
+			<key>PayloadIdentifier</key>
+			<string>com.kevster.HomePad.kiosk.restrictions</string>
+			<key>PayloadUUID</key>
+			<string>6B1E2A54-9C0D-4F1B-8E61-2B7D0C5A4E10</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
+			<key>PayloadDisplayName</key>
+			<string>HomePad Single App Mode</string>
+			<key>autonomousSingleAppModePermittedAppIDs</key>
+			<array>
+				<string>com.kevster.HomePad</string>
+			</array>
+		</dict>
+	</array>
+	<key>PayloadType</key>
+	<string>Configuration</string>
+	<key>PayloadIdentifier</key>
+	<string>com.kevster.HomePad.kiosk</string>
+	<key>PayloadUUID</key>
+	<string>0F6C8D3E-71A4-4B52-A9E7-5D3C1F2B8A47</string>
+	<key>PayloadVersion</key>
+	<integer>1</integer>
+	<key>PayloadDisplayName</key>
+	<string>HomePad Kiosk Lock</string>
+	<key>PayloadDescription</key>
+	<string>Lets the HomePad app lock this supervised iPad to itself (Autonomous Single App Mode).</string>
+	<key>PayloadScope</key>
+	<string>System</string>
+</dict>
+</plist>
