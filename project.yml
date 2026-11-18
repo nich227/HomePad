@@ -1,0 +1,187 @@
+name: HomePad
+
+options:
+  bundleIdPrefix: com.kevster
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+
+configFiles:
+  Debug: Config/Shared.xcconfig
+  Release: Config/Shared.xcconfig
+
+packages:
+  HomePadCore:
+    path: Packages/HomePadCore
+  HomePadAnimations:
+    path: Packages/HomePadAnimations
+  HomePadKiosk:
+    path: Packages/HomePadKiosk
+  HomePadFace:
+    path: Packages/HomePadFace
+  HomePadBeam:
+    path: Packages/HomePadBeam
+  HomePadMessaging:
+    path: Packages/HomePadMessaging
+  HomePadUI:
+    path: Packages/HomePadUI
+  HomePadSettingsCatalog:
+    path: Packages/HomePadSettingsCatalog
+
+targets:
+  HomePad:
+    type: application
+    platform: iOS
+    sources:
+      - path: HomePad
+        excludes:
+          - Models/NOTICE.md
+      - path: HomePad/Models/NOTICE.md
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HOMEPAD_BUNDLE_PREFIX)
+        PRODUCT_NAME: HomePad
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # A generated class named FaceEmbedder would shadow the package's FaceEmbedder protocol.
+        COREML_CODEGEN_LANGUAGE: None
+    info:
+      path: HomePad/Info.plist
+      properties:
+        CFBundleDisplayName: HomePad
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: $(HOMEPAD_BUNDLE_PREFIX)
+            CFBundleURLSchemes:
+              - homepad
+        NSUserActivityTypes:
+          - $(HOMEPAD_BUNDLE_PREFIX).beam
+        NSBonjourServices:
+          - _homepad._tcp
+        NSLocalNetworkUsageDescription: HomePad uses your local network to connect this device with the paired HomePad hub and iPhones in your home.
+        NSCameraUsageDescription: HomePad uses the camera on this device to recognize household members, to scan a pairing code, and to show the Mirror. Images are processed on this device and are never stored or sent anywhere.
+        NSHomeKitUsageDescription: HomePad shows and controls the accessories and scenes in your home.
+        NSAppleMusicUsageDescription: HomePad shows what is playing and lets you control playback.
+        NSCalendarsFullAccessUsageDescription: HomePad shows your upcoming events on the hub while it recognizes you.
+        NSRemindersFullAccessUsageDescription: HomePad shows your reminders on the hub while it recognizes you, and lets you check them off.
+        NSLocationWhenInUseUsageDescription: HomePad uses your location to show the local weather.
+    entitlements:
+      path: HomePad/HomePad.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(HOMEPAD_APP_GROUP)
+        com.apple.developer.group-session: true
+        com.apple.developer.homekit: true
+    dependencies:
+      - package: HomePadCore
+        product: HomePadCore
+      - package: HomePadAnimations
+        product: HomePadAnimations
+      - package: HomePadKiosk
+        product: HomePadKiosk
+      - package: HomePadFace
+        product: HomePadFace
+      - package: HomePadBeam
+        product: HomePadBeam
+      - package: HomePadMessaging
+        product: HomePadMessaging
+      - package: HomePadUI
+        product: HomePadUI
+      - package: HomePadSettingsCatalog
+        product: HomePadSettingsCatalog
+      - target: BeamShare
+      - target: MessagesExtension
+
+  BeamShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Extensions/BeamShare
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HOMEPAD_BUNDLE_PREFIX).BeamShare
+        PRODUCT_NAME: BeamShare
+        INFOPLIST_FILE: Extensions/BeamShare/Info.plist
+        GENERATE_INFOPLIST_FILE: false
+        SKIP_INSTALL: true
+    entitlements:
+      path: Extensions/BeamShare/BeamShare.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(HOMEPAD_APP_GROUP)
+    dependencies:
+      - package: HomePadCore
+        product: HomePadCore
+      - package: HomePadBeam
+        product: HomePadBeam
+
+  MessagesExtension:
+    type: app-extension.messages
+    platform: iOS
+    sources:
+      - path: Extensions/MessagesExtension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HOMEPAD_BUNDLE_PREFIX).MessagesExtension
+        PRODUCT_NAME: MessagesExtension
+        INFOPLIST_FILE: Extensions/MessagesExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: false
+        SKIP_INSTALL: true
+        ASSETCATALOG_COMPILER_APPICON_NAME: iMessage App Icon
+    entitlements:
+      path: Extensions/MessagesExtension/MessagesExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(HOMEPAD_APP_GROUP)
+    dependencies:
+      - package: HomePadCore
+        product: HomePadCore
+      - package: HomePadMessaging
+        product: HomePadMessagingCore
+
+  HomePadUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HomePadUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(HOMEPAD_BUNDLE_PREFIX).UITests
+        GENERATE_INFOPLIST_FILE: true
+        TEST_TARGET_NAME: HomePad
+    dependencies:
+      - target: HomePad
+
+schemes:
+  HomePad:
+    build:
+      targets:
+        HomePad: all
+        HomePadUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - HomePadUITests
+    archive:
+      config: Release
