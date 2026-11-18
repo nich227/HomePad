@@ -38,6 +38,22 @@
 		</dict>
 		<dict>
 			<key>FooterText</key>
+			<string>On an iPad without Face ID, after the camera recognizes a household member, any fingerprint enrolled on this iPad unlocks that member's personal content until they leave. Touch ID confirms that someone who can unlock this iPad is present, not which person. The iPad passcode is not accepted. Needs Personalize Without Depth Check to be on.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>face.touchIDUnlock</string>
+			<key>Title</key>
+			<string>Unlock with Touch ID</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
+		<dict>
+			<key>FooterText</key>
 			<string>How sure the hub must be before it accepts a face as a household member. Relaxed recognizes people more readily and is more likely to mistake one person for another. Strict does the opposite.</string>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
