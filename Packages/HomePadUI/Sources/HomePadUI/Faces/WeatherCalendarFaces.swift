@@ -122,11 +122,16 @@ struct CalendarFace: View {
         let detailed = density == .detailed
         ZStack {
             Color(red: 0.94, green: 0.94, blue: 0.95)
-            Text(date, format: .dateTime.day())
-                .font(.system(size: metrics.pt(detailed ? 62 : 74), weight: .semibold).width(.condensed))
-                .foregroundStyle(red.opacity(detailed ? 0.8 : 1))
-                .offset(y: metrics.pt(detailed ? 8 : 6))
-                .accessibilityHidden(true)
+            // The large date belongs to the far layout. Up close the month grid stands alone and
+            // marks today with a circle, so nothing is drawn through the numbers.
+            if !detailed {
+                Text(date, format: .dateTime.day())
+                    .font(.system(size: metrics.pt(74), weight: .semibold).width(.condensed))
+                    .foregroundStyle(red)
+                    .offset(y: metrics.pt(6))
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
             VStack(spacing: metrics.pt(detailed ? 2.4 : 0)) {
                 HStack {
                     Text(date, format: .dateTime.month(.wide).year())
