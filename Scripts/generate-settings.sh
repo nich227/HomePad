@@ -6,6 +6,10 @@
 set -uo pipefail
 
 root="${0:A:h:h}"
+source "$root/Scripts/lib/lock.zsh"
+homepad_lock "$root"
+trap homepad_unlock EXIT
+trap 'exit 130' INT TERM
 bundle="$root/HomePad/Settings.bundle"
 tests="HomePadSettingsCatalogTests"
 

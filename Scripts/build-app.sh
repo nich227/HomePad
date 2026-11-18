@@ -4,6 +4,10 @@
 set -uo pipefail
 
 root="${0:A:h:h}"
+source "$root/Scripts/lib/lock.zsh"
+homepad_lock "$root"
+trap homepad_unlock EXIT
+trap 'exit 130' INT TERM
 device="${1:-iPad Pro 13-inch (M5)}"
 log="${TMPDIR:-/tmp}/homepad-build-app.log"
 

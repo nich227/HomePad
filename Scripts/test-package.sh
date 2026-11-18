@@ -11,6 +11,8 @@
 set -uo pipefail
 
 root="${0:A:h:h}"
+source "$root/Scripts/lib/lock.zsh"
+homepad_lock "$root"
 package="${1:?package name}"
 device="${2:-iPhone 18 Pro}"
 shift
@@ -38,7 +40,7 @@ fi
 coverage=YES
 [[ -n "${(M)@:#-(only|skip)-testing*}" ]] && coverage=NO
 
-trap 'xcrun simctl shutdown "$device" >/dev/null 2>&1' EXIT
+trap 'xcrun simctl shutdown "$device" >/dev/null 2>&1; homepad_unlock' EXIT
 trap 'exit 130' INT TERM
 
 rm -rf "$result"
