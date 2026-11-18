@@ -1,5 +1,6 @@
 import AppIntents
 import HomePadAnimations
+import HomePadAssistant
 import HomePadAnimationsCore
 import HomePadCore
 import HomePadMessaging
@@ -22,7 +23,7 @@ struct HomePadApp: App {
 /// Tells the system which packages contribute App Intents to this app.
 struct HomePadAppIntents: AppIntentsPackage {
     static var includedPackages: [any AppIntentsPackage.Type] {
-        [HomePadMessagingIntents.self]
+        [HomePadMessagingIntents.self, HomePadAssistantIntents.self]
     }
 }
 
@@ -36,26 +37,39 @@ struct AppRootView: View {
 
     var body: some View {
         Group {
-            switch model.phase {
-            case .starting:
-                StartingView()
-            case .hub(let hub):
-                HubSceneView(model: model, hub: hub)
-            case .companion(let companion):
-                CompanionSceneView(model: model, companion: companion)
-            case .failed(let message):
-                ContentUnavailableView {
-                    Label("HomePad Could Not Start", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(verbatim: message)
-                }
+            if model.gate.mayRun {
+                scene
+            } else {
+                AppleIntelligenceRequiredView(gate: model.gate)
             }
         }
-        .task(id: role) {
-            await model.configure(for: role)
+        .task(id: Launch(role: role, mayRun: model.gate.mayRun)) {
+            await model.configure(for: role, mayRun: model.gate.mayRun)
         }
         .onChange(of: scenePhase, initial: true) { _, phase in
             model.scenePhaseChanged(to: phase)
+        }
+    }
+
+    private struct Launch: Hashable {
+        let role: DeviceRole
+        let mayRun: Bool
+    }
+
+    @ViewBuilder private var scene: some View {
+        switch model.phase {
+        case .starting:
+            StartingView()
+        case .hub(let hub):
+            HubSceneView(model: model, hub: hub)
+        case .companion(let companion):
+            CompanionSceneView(model: model, companion: companion)
+        case .failed(let message):
+            ContentUnavailableView {
+                Label("HomePad Could Not Start", systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(verbatim: message)
+            }
         }
     }
 }

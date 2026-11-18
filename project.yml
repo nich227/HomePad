@@ -27,6 +27,8 @@ packages:
     path: Packages/HomePadMessaging
   HomePadUI:
     path: Packages/HomePadUI
+  HomePadAssistant:
+    path: Packages/HomePadAssistant
   HomePadSettingsCatalog:
     path: Packages/HomePadSettingsCatalog
 
@@ -84,6 +86,8 @@ targets:
         NSCalendarsFullAccessUsageDescription: HomePad shows your upcoming events on the hub while it recognizes you.
         NSRemindersFullAccessUsageDescription: HomePad shows your reminders on the hub while it recognizes you, and lets you check them off.
         NSLocationWhenInUseUsageDescription: HomePad uses your location to show the local weather.
+        NSMicrophoneUsageDescription: HomePad listens through the microphone only while the Assistant shows that it is listening. Audio is processed on this device and is never stored or sent anywhere.
+        NSSpeechRecognitionUsageDescription: HomePad turns what you say to the Assistant into text on this device. Nothing you say is sent to Apple or anywhere else.
     entitlements:
       path: HomePad/HomePad.entitlements
       properties:
@@ -107,6 +111,10 @@ targets:
         product: HomePadMessaging
       - package: HomePadUI
         product: HomePadUI
+      - package: HomePadAssistant
+        product: HomePadAssistant
+      - package: HomePadAssistant
+        product: HomePadAssistantCore
       - package: HomePadSettingsCatalog
         product: HomePadSettingsCatalog
       - target: BeamShare

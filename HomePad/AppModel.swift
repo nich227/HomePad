@@ -1,4 +1,5 @@
 import Foundation
+import HomePadAssistant
 import HomePadBeam
 import HomePadBeamCore
 import HomePadCore
@@ -55,6 +56,8 @@ final class AppModel {
 
     let settings: HomePadSettings
     let session: HouseholdSession
+    /// HomePad runs only while Apple Intelligence is available on this device.
+    let gate = AppleIntelligenceGate()
     private(set) var phase = Phase.starting
 
     @ObservationIgnored private var configuredRole: DeviceRole?
@@ -77,12 +80,17 @@ final class AppModel {
         ExtensionSettingsMirror.copy()
 
         // A companion is built at once: Shortcuts can run an intent before any scene exists.
-        if HomePadRootView.role(settings: settings) == .companion {
+        if gate.mayRun, HomePadRootView.role(settings: settings) == .companion {
             startCompanion()
         }
     }
 
-    func configure(for role: DeviceRole) async {
+    /// Builds the services for `role`, or stops them all while the gate does not let HomePad run.
+    func configure(for role: DeviceRole, mayRun: Bool) async {
+        guard mayRun else {
+            await tearDown()
+            return
+        }
         guard configuredRole != role else { return }
         await tearDown()
         switch role {
@@ -105,6 +113,7 @@ final class AppModel {
     func scenePhaseChanged(to scenePhase: ScenePhase) {
         isSceneActive = scenePhase == .active
         if scenePhase == .active {
+            gate.refresh()
             settings.refresh()
             session.requiresCompanionForPersonalContent = settings[GeneralSettings.requireCompanionForPersonalContent]
             ExtensionSettingsMirror.copy()
