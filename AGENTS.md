@@ -5,6 +5,8 @@ iPadOS and iOS 26+ app. iPad is the hub, iPhone is the companion. Root: this dir
 ## Invariants
 
 1. iOS and iPadOS only, deployment target 26.0. No macOS, Catalyst, visionOS, tvOS, watchOS.
+   An API newer than iOS 26.0 goes behind `if #available` with the iOS 26 behavior as the fallback.
+   Layout adapts by size class and container size. Never branch on a device model.
    Every `Package.swift` declares `platforms: [.iOS(.v26)]` and nothing else. Unit tests run on
    the iOS simulator through `Scripts/test-package.sh`, never on the Mac. No package has an
    executable target.
@@ -93,6 +95,8 @@ caller sets `TEST_RUNNER_<NAME>`; a test in the simulator can read and write thi
 | Regenerate the Xcode project | `xcodegen generate` |
 | Build the app for the iPad simulator | `Scripts/build-app.sh` |
 | Walk the hub in the simulator, save screenshots | `Scripts/ui-walkthrough.sh` |
+| Walk the companion on iPhone | `Scripts/ui-walkthrough.sh "iPhone 18 Pro"` |
+| Capture iPhone Duo sizes (no Duo simulator here) | `Scripts/ui-walkthrough.sh "iPad mini (A20 Pro)"` |
 | Tile the screenshots into one image | `Scripts/contact-sheet.py <out.jpg> "<glob>"` |
 | Regenerate animations / check them | `python3 Packages/HomePadAnimations/Tools/generate_animations.py [--check]` |
 | Write animation preview sheets | `TEST_RUNNER_HOMEPAD_ANIMATION_PREVIEW_DIR="$PWD/Packages/HomePadAnimations/Tools/preview" Scripts/test-package.sh HomePadAnimations "iPhone 18 Pro" -only-testing:HomePadAnimationsCoreTests/PreviewFrameTests` |
@@ -117,6 +121,7 @@ and `$TMPDIR/homepad-test-<Package>.log`. It exits non-zero when the build or a 
    The script prints `coverage <Target>: <percent>` and each file below 100%.
 2. `Scripts/generate-settings.sh --check`
 3. `Scripts/build-app.sh` exits 0.
-4. `Scripts/ui-walkthrough.sh` passes, and the screenshots in `design/screenshots` look right.
+4. `Scripts/ui-walkthrough.sh` passes on iPad Pro, iPhone 18 Pro, and iPad mini for a UI change,
+   and the screenshots in `design/screenshots` look right.
 5. `grep -rn "NWListener\|listen(" Packages HomePad Extensions` shows only `PeerLink.swift`.
 6. `grep -rn "macOS\|AppKit" --include="*.swift" Packages HomePad Extensions HomePadUITests` shows nothing.

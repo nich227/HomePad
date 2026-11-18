@@ -16,6 +16,7 @@ iPhone and iPad only, iOS and iPadOS 26 or later. Bundle ID `com.kevster.HomePad
 | Messages | A Shortcuts automation relays incoming messages, an iMessage extension sends pages, replies open the system compose sheet |
 | Kiosk lock | The iPad stays on HomePad until someone enters the iPad passcode |
 | Settings | Every preference is in the system Settings app |
+| iPhone Duo | Tabs on the outer display, two columns on the inner display, and a hub layout that splits at the fold |
 
 ## Open and run
 
@@ -46,6 +47,8 @@ capabilities on that team.
 - **Blocking the Home gesture.** An app can lock the iPad to itself only on a supervised iPad
   with the profile in `Config/`. Any other iPad needs Guided Access.
 - **Hold the iPhone near the display.** No third-party trigger exists for this.
+- **Touch ID.** It cannot tell household members apart. On an iPad without Face ID the camera
+  picks the person and a fingerprint confirms that someone enrolled on the iPad is present.
 
 ## Where things are
 
