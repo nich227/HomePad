@@ -122,6 +122,13 @@ public enum ContentVisibility: Equatable, Sendable {
     case hidden
 }
 
+public enum TapAction: Equatable, Sendable {
+    case open
+    /// Run the device's biometrics, then open what was tapped if that unlocked it.
+    case requestUnlock
+    case none
+}
+
 public enum VisibilityPolicy {
     public static func visibility(for access: ContentAccess, context: AudienceContext) -> ContentVisibility {
         switch access {
@@ -148,6 +155,29 @@ public enum VisibilityPolicy {
     /// Only a fully visible app opens. A redacted icon stays put so nothing personal is revealed.
     public static func canOpen(_ app: HubApp, context: AudienceContext) -> Bool {
         visibility(of: app, context: context) == .visible
+    }
+
+    /// What a tap on an app icon or a widget does. A greyed-out personal item is normally inert.
+    /// While the device's own biometrics are offered, the tap asks to unlock instead.
+    public static func tapAction(for access: ContentAccess, context: AudienceContext, isDeviceUnlockOffered: Bool) -> TapAction {
+        switch visibility(for: access, context: context) {
+        case .visible: .open
+        case .redacted: isDeviceUnlockOffered ? .requestUnlock : .none
+        case .hidden: .none
+        }
+    }
+
+    /// After an unlock attempt, the app the person tapped opens only when the attempt worked
+    /// and the app is now theirs to see.
+    public static func appToOpen(afterUnlock succeeded: Bool, requested: HubApp?, context: AudienceContext) -> HubApp? {
+        guard succeeded, let requested, canOpen(requested, context: context) else { return nil }
+        return requested
+    }
+
+    /// Whether to show "Unlock with Touch ID": someone is personalized but locked, and the
+    /// device can confirm them.
+    public static func showsDeviceUnlock(context: AudienceContext, isDeviceUnlockOffered: Bool) -> Bool {
+        isDeviceUnlockOffered && !context.isGuest && !context.isPersonalContentUnlocked
     }
 
     /// With setup mode off and nobody enrolled there is no way to add people from inside the app,

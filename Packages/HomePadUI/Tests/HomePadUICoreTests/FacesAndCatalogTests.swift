@@ -101,6 +101,29 @@ import Testing
         #expect(VisibilityPolicy.visibility(of: HubWidgetKind.timers, context: guest) == .visible)
     }
 
+    @Test func tapAction_whenPersonalItemIsLocked_thenUnlockOnlyWhileTheDeviceOffersIt() {
+        #expect(VisibilityPolicy.tapAction(for: .personal, context: manual, isDeviceUnlockOffered: false) == TapAction.none)
+        #expect(VisibilityPolicy.tapAction(for: .personal, context: manual, isDeviceUnlockOffered: true) == .requestUnlock)
+        #expect(VisibilityPolicy.tapAction(for: .personal, context: unlocked, isDeviceUnlockOffered: true) == .open)
+        #expect(VisibilityPolicy.tapAction(for: .personal, context: guest, isDeviceUnlockOffered: true) == TapAction.none)
+        #expect(VisibilityPolicy.tapAction(for: .guest, context: guest, isDeviceUnlockOffered: false) == .open)
+        #expect(VisibilityPolicy.tapAction(for: .member, context: manual, isDeviceUnlockOffered: true) == .open)
+    }
+
+    @Test func appToOpen_whenUnlockWorked_thenTheTappedAppOpensOtherwiseNothing() {
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .messages, context: unlocked) == .messages)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: false, requested: .messages, context: unlocked) == nil)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: .messages, context: manual) == nil)
+        #expect(VisibilityPolicy.appToOpen(afterUnlock: true, requested: nil, context: unlocked) == nil)
+    }
+
+    @Test func showsDeviceUnlock_whenPersonalizedButLockedAndOffered_thenTrue() {
+        #expect(VisibilityPolicy.showsDeviceUnlock(context: manual, isDeviceUnlockOffered: true))
+        #expect(!VisibilityPolicy.showsDeviceUnlock(context: manual, isDeviceUnlockOffered: false))
+        #expect(!VisibilityPolicy.showsDeviceUnlock(context: unlocked, isDeviceUnlockOffered: true))
+        #expect(!VisibilityPolicy.showsDeviceUnlock(context: guest, isDeviceUnlockOffered: true))
+    }
+
     @Test func needsSetupHint_whenNobodyEnrolledAndSetupOff_thenTrue() {
         #expect(VisibilityPolicy.needsSetupHint(profileCount: 0, setupMode: false))
         #expect(!VisibilityPolicy.needsSetupHint(profileCount: 0, setupMode: true))

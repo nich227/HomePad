@@ -3,6 +3,20 @@ import HomePadAnimationsCore
 import HomePadUICore
 import SwiftUI
 
+/// The device's own biometrics (Touch ID) as a second step after a camera match that could not
+/// prove a live face. The camera picks who; this unlocks that member's personal content.
+public struct HubDeviceUnlock {
+    /// Whether to show the unlock affordance right now.
+    public var isOffered: @MainActor () -> Bool
+    /// Runs the biometric check. True when personal content is now unlocked.
+    public var unlock: @MainActor () async -> Bool
+
+    public init(isOffered: @escaping @MainActor () -> Bool, unlock: @escaping @MainActor () async -> Bool) {
+        self.isOffered = isOffered
+        self.unlock = unlock
+    }
+}
+
 /// Views supplied by the other feature packages. The app target fills these in; each has a
 /// placeholder so the shell runs on its own.
 @MainActor
@@ -18,6 +32,9 @@ public struct HubFeatureSlots {
     public var recognitionIndicator: @MainActor () -> AnyView
     /// Pairing an iPhone. Shown only while setup mode is on.
     public var pairing: @MainActor () -> AnyView
+    /// Nil when the device has no biometrics to offer. The shell then behaves as it does for
+    /// any locked member.
+    public var deviceUnlock: HubDeviceUnlock?
 
     public init(
         beam: @escaping @MainActor () -> AnyView = { HubFeatureSlots.placeholder(.beam) },
@@ -25,7 +42,8 @@ public struct HubFeatureSlots {
         projectedApps: @escaping @MainActor () -> AnyView = { HubFeatureSlots.placeholder(.projectedApps) },
         people: @escaping @MainActor () -> AnyView = { HubFeatureSlots.placeholder(.people) },
         recognitionIndicator: @escaping @MainActor () -> AnyView = { AnyView(EmptyView()) },
-        pairing: @escaping @MainActor () -> AnyView = { HubFeatureSlots.placeholder(.pairing) }
+        pairing: @escaping @MainActor () -> AnyView = { HubFeatureSlots.placeholder(.pairing) },
+        deviceUnlock: HubDeviceUnlock? = nil
     ) {
         self.beam = beam
         self.messages = messages
@@ -33,6 +51,7 @@ public struct HubFeatureSlots {
         self.people = people
         self.recognitionIndicator = recognitionIndicator
         self.pairing = pairing
+        self.deviceUnlock = deviceUnlock
     }
 
     func view(for app: HubApp) -> AnyView? {
