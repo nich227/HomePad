@@ -69,11 +69,11 @@ public struct SampleRecipeEnhancer: RecipeEnhancing {
                 .filter { !$0.isEmpty }
             for action in actions {
                 let words = action.split(separator: " ")
-                let lowered = action.lowercased()
+                let mentioned = Set(action.lowercased().split { !$0.isLetter }.map(String.init))
                 let used = recipe.ingredients.filter { line in
                     line.lowercased()
                         .split { !$0.isLetter }
-                        .contains { $0.count > 3 && !Self.fillers.contains(String($0)) && lowered.contains($0) }
+                        .contains { $0.count > 2 && !Self.fillers.contains(String($0)) && mentioned.contains(String($0)) }
                 }
                 steps.append(RecipeStep(
                     id: steps.count + 1,
@@ -88,7 +88,7 @@ public struct SampleRecipeEnhancer: RecipeEnhancing {
         return Recipe(name: recipe.name, ingredients: recipe.ingredients, sections: [RecipeSection(steps: steps)], isTidied: true)
     }
 
-    private static let fillers: Set<String> = ["cups", "tablespoons", "teaspoons", "cloves", "fresh", "chopped", "peeled", "cubed", "leaves", "large", "small", "yellow"]
+    private static let fillers: Set<String> = ["and", "cups", "tablespoons", "teaspoons", "cloves", "fresh", "chopped", "peeled", "cubed", "leaves", "large", "small", "yellow"]
 }
 
 /// The recipe reader's state: the page being loaded, the recipe on screen, and the cook's place

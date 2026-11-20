@@ -68,6 +68,7 @@ final class DuoWalkthroughTests: WalkthroughCase {
         snapshot("d40-ipad-companion")
 
         XCUIDevice.shared.orientation = .landscapeLeft
+        capturesLandscape = true
         pause(1)
         launch(companion, Hook.sample, Hook.viewport(Size.innerOnItsSide))
         XCTAssertTrue(section("people").waitForExistence(timeout: 60))
@@ -139,6 +140,7 @@ final class DuoWalkthroughTests: WalkthroughCase {
         snapshot("h43-inner-hub-folded-across")
 
         XCUIDevice.shared.orientation = .landscapeLeft
+        capturesLandscape = true
         pause(1)
         hub(member, Hook.viewport(Size.innerOnItsSide))
         snapshot("h30-inner-landscape-hub-face")

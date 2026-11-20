@@ -104,15 +104,17 @@ public struct HubRootView: View {
         GeometryReader { proxy in
             HubPanes(simulatesFold: hooks.foldsHub) {
                 chromePane(container: proxy.size, isHidden: needsWelcome)
+                    .hubNightFilter(model.night.isNight)
             } canvas: {
                 canvasPane(container: proxy.size, preferences: preferences, audience: audience)
             }
         }
         .ignoresSafeArea()
         .background(Color.black.ignoresSafeArea())
-        // Night Mode is applied here and nowhere else, so nothing drawn by the hub, or by a
-        // package it hosts, is left in color.
-        .hubNightTint(model.night.isNight)
+        // Night Mode is decided here and nowhere else. Everything the hub draws, and every view
+        // it hosts, goes through the red filter in `canvasPane` and `chromePane`. The one
+        // exception is the assistant's overlay, which is told about the night and draws itself.
+        .environment(\.hubIsNight, model.night.isNight)
         .environment(\.hubPreferences, preferences)
         .environment(\.hubUnits, HubUnits(preferences: preferences))
         .environment(\.faceDensity, density)
@@ -170,8 +172,10 @@ public struct HubRootView: View {
         .onChange(of: audience) { _, newAudience in
             navigator.audienceChanged(newAudience)
         }
-        .onChange(of: session.activation.profileID) { previous, current in
-            navigator.personChanged(from: previous, to: current)
+        .onChange(of: session.audienceGeneration) { _, _ in
+            // The session counts a sign out here and nowhere else. A member the camera lost
+            // for a moment is still signed in, and nothing closes for them.
+            navigator.audienceSignedOut()
         }
         .onChange(of: session.activation) { old, new in
             // The camera just recognized a member: say so in the pill for a moment.
@@ -246,17 +250,20 @@ public struct HubRootView: View {
             let size = CGSize(width: layout.canvas.width, height: layout.canvas.height)
             let metrics = HubMetrics(size: size, textScale: dynamicTypeSize.hubTextScale, topObstruction: topObstruction(over: layout.canvas, in: pane))
             ZStack(alignment: .topLeading) {
-                Color.black
-                canvas(preferences: preferences, audience: audience, metrics: metrics, isApart: isApart)
-                    .frame(width: size.width, height: size.height)
-                    .coordinateSpace(.named(HubCoordinateSpace.canvas))
-                    .clipShape(RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous))
-                    .offset(x: layout.canvas.x, y: layout.canvas.y)
-                if navigator.state.isTakeoverPresented {
-                    BeamTakeoverView(content: slots.beam) { navigator.dismissBeam() }
-                        .transition(.opacity.combined(with: .scale(scale: 1.04)))
-                        .zIndex(10)
+                ZStack(alignment: .topLeading) {
+                    Color.black
+                    canvas(preferences: preferences, audience: audience, metrics: metrics, isApart: isApart)
+                        .frame(width: size.width, height: size.height)
+                        .coordinateSpace(.named(HubCoordinateSpace.canvas))
+                        .clipShape(RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous))
+                        .offset(x: layout.canvas.x, y: layout.canvas.y)
+                    if navigator.state.isTakeoverPresented {
+                        BeamTakeoverView(content: slots.beam) { navigator.dismissBeam() }
+                            .transition(.opacity.combined(with: .scale(scale: 1.04)))
+                            .zIndex(10)
+                    }
                 }
+                .hubNightFilter(model.night.isNight)
                 if navigator.state.overlay == .assistant, let assistant {
                     // The assistant draws its own edge and card. The hub gives it the screen.
                     assistant.overlay { navigator.dismissOverlay() }
@@ -269,6 +276,10 @@ public struct HubRootView: View {
                                 .accessibilityLabel("Assistant is open")
                                 .accessibilityIdentifier("hub.assistantOpen")
                         }
+                        // An assistant from another package is told about the night through
+                        // `HubNavigator.isNightMode` and draws itself red. The stand-in is not,
+                        // so it goes through the filter like everything else.
+                        .hubNightFilter(model.night.isNight && slots.assistant == nil)
                         .transition(.opacity)
                         .zIndex(11)
                 }
@@ -339,8 +350,16 @@ public struct HubRootView: View {
         let needsWelcome = needsWelcome(preferences)
         ZStack {
             FacePagerView(faces: preferences.faces.enabledFaces, selection: $model.face, facePosition: facePosition)
-                .scaleEffect(onFaces ? 1 : 1.05)
-                .blur(radius: blursFace ? metrics.token(28) : 0)
+                // Behind the Home Screen the face is a backdrop: blurred far enough, and with
+                // its contrast pulled in, that a white tile or a dark picture on it does not
+                // show through as a patch under the icons. Saturation goes back up because
+                // lower contrast alone turns the face's color to gray, and the scale keeps
+                // the blur from pulling the empty area outside the face in at the edges.
+                .scaleEffect(onFaces ? 1 : 1.2)
+                .contrast(blursFace ? 0.5 : 1)
+                .brightness(blursFace ? -0.2 : 0)
+                .saturation(blursFace ? 1.5 : 1)
+                .blur(radius: blursFace ? metrics.token(104) : 0)
                 .overlay(Color.black.opacity(onFaces ? 0 : (blursFace ? 0.3 : 1)))
                 .allowsHitTesting(state.canChangeFace)
                 .accessibilityHidden(!onFaces)
@@ -358,7 +377,13 @@ public struct HubRootView: View {
                     },
                     onUnlock: { runDeviceUnlock(thenOpen: $0) },
                     onMove: { model.move(itemID: $0, onto: $1) },
-                    onClose: { navigator.showFaces() }
+                    onClose: {
+                        // A pull down that began where it opens the control center or the
+                        // assistant does that and nothing else.
+                        if !model.dragStartsOverlay {
+                            navigator.showFaces()
+                        }
+                    }
                 )
                 .allowsHitTesting(surface == .homeScreen)
                 .accessibilityHidden(surface != .homeScreen)
@@ -629,7 +654,18 @@ public struct HubRootView: View {
     /// trailing corner, and down from the top center. Everything else is left to the face
     /// pager and to scrolling.
     private func edgeSwipe(in size: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 24).onEnded { value in
+        DragGesture(minimumDistance: 24)
+            .onChanged { value in
+                model.dragStartsOverlay = HubGesture.startsOverlay(
+                    startX: Double(value.startLocation.x),
+                    startY: Double(value.startLocation.y),
+                    width: Double(size.width),
+                    height: Double(size.height),
+                    isAssistantAvailable: isAssistantAvailable
+                )
+            }
+            .onEnded { value in
+            model.dragStartsOverlay = false
             model.touch()
             let event = HubGesture.event(
                 startX: Double(value.startLocation.x),

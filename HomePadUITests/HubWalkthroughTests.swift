@@ -13,6 +13,7 @@ final class HubWalkthroughTests: WalkthroughCase {
         try await super.setUp()
         try XCTSkipUnless(isPad && !isDuoStandIn, "The hub walkthrough runs on a large iPad.")
         XCUIDevice.shared.orientation = isPortraitRun ? .portrait : .landscapeLeft
+        capturesLandscape = !isPortraitRun
     }
 
     // MARK: First launch, as a guest across the room
@@ -53,7 +54,7 @@ final class HubWalkthroughTests: WalkthroughCase {
         XCTAssertFalse(app.buttons["app.projectedApps"].exists, "a guest saw iPhone Apps, which is personal")
         XCTAssertFalse(app.buttons["app.messages"].exists, "Messages still has an icon")
         XCTAssertFalse(app.buttons["app.alarms"].exists, "a guest saw Alarms")
-        XCTAssertFalse(app.buttons["app.intercom"].exists, "Intercom has an icon with nothing behind it")
+        XCTAssertFalse(app.buttons["app.intercom"].exists, "a guest has the Intercom icon, which is for members")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -142,20 +143,38 @@ final class HubWalkthroughTests: WalkthroughCase {
             let field = app.textFields["recipes.link"]
             field.tap()
             field.typeText("example.com/soup\n")
-            pause(3)
-            snapshot("b61-recipe-cover")
+            // The page's own recipe shows at once. The tidied one takes its place a moment later.
+            XCTAssertTrue(app.buttons["recipes.cook"].waitForExistence(timeout: 5), "the recipe's cover did not appear")
+            snapshot("b61-recipe-cover-as-the-page-gave-it")
+            pause(4)
+            snapshot("b611-recipe-cover-tidied")
             app.buttons["recipes.ingredients"].tap()
             pause(1)
+            app.buttons["4 cups vegetable stock"].firstMatch.tap()
+            pause(0.5)
             snapshot("b62-recipe-ingredients")
+            XCTAssertTrue(element("recipes.tidiedNote").exists, "the ingredient list does not say the recipe was tidied")
             app.buttons["recipes.back"].tap()
             pause(1)
             app.buttons["recipes.cook"].tap()
             pause(1)
             snapshot("b63-recipe-step-1")
+            XCTAssertTrue(element("recipes.stepTitle").exists, "a tidied step has no short title")
             app.buttons["recipes.next"].tap()
             pause(1)
-            snapshot("b64-recipe-step-2")
+            snapshot("b64-recipe-step-2-with-its-ingredients")
             XCTAssertTrue(element("recipes.timerPill").exists, "the running timer is not floating over the recipe")
+            XCTAssertTrue(element("recipes.stepIngredients").exists, "the step does not show the ingredients it uses")
+            // To the page's own words and back, without losing the place.
+            app.buttons["recipes.toggleOriginal"].tap()
+            pause(1.5)
+            snapshot("b65-recipe-original-text")
+            XCTAssertFalse(element("recipes.stepTitle").exists, "the original text still shows a tidied title")
+            XCTAssertEqual(element("recipes.stepBadge").label, "Step 1 of 4", "switching to the original lost the place")
+            app.buttons["recipes.toggleOriginal"].tap()
+            pause(1.5)
+            snapshot("b66-recipe-tidied-again")
+            XCTAssertEqual(element("recipes.stepBadge").label, "Step 1 of 7", "switching back did not return to the tidied recipe")
             app.buttons["recipes.stopCooking"].tap()
             pause(1)
             app.buttons["recipes.closeRecipe"].tap()
@@ -173,6 +192,8 @@ final class HubWalkthroughTests: WalkthroughCase {
             pause(2.5)
             snapshot("b80-assistant")
             XCTAssertTrue(element("hub.assistantOpen").exists, "the assistant did not open from the status area")
+            askAssistant("What time is it?")
+            snapshot("b801-assistant-answered")
             closeAssistant()
             app.buttons["hub.profile"].firstMatch.tap()
             pause(1.5)
@@ -193,6 +214,10 @@ final class HubWalkthroughTests: WalkthroughCase {
         pause(6)
         walkFaces(prefix: "c1")
         XCTAssertFalse(app.buttons["home.thermostat.up"].exists, "the thermostat steppers showed at the middle distance")
+        cookSampleRecipe()
+        snapshot("c30-mid-recipe-step")
+        XCTAssertTrue(element("recipes.stepIngredients").exists, "the step's ingredients are missing at the middle distance")
+        XCTAssertFalse(app.buttons["recipes.next"].exists, "the step buttons showed at the middle distance")
 
         // Across the room, with the same home: the large numbers only.
         launch(Hook.sample, Hook.audience("recognized"), Hook.proximity("far"))
@@ -203,6 +228,9 @@ final class HubWalkthroughTests: WalkthroughCase {
             swipeToFace(title)
             snapshot("c2\(index + 1)-far-\(slug(title))")
         }
+        cookSampleRecipe()
+        snapshot("c31-far-recipe-step")
+        XCTAssertFalse(element("recipes.stepIngredients").exists, "the step's ingredients showed from across the room")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -234,10 +262,20 @@ final class HubWalkthroughTests: WalkthroughCase {
             closeApp()
         }
 
+        cookSampleRecipe()
+        snapshot("n51-recipe-step-night")
+        app.buttons["recipes.stopCooking"].tap()
+        pause(1)
+        app.buttons["recipes.closeRecipe"].tap()
+        pause(1)
+        closeApp()
+
         app.buttons["hub.assistant"].firstMatch.tap()
         pause(1.5)
         snapshot("n60-assistant-night")
         XCTAssertTrue(element("hub.assistantOpen").exists, "the assistant did not open from the status area")
+        askAssistant("What time is it?")
+        snapshot("n61-assistant-answered-night")
         closeAssistant()
 
         app.buttons["hub.profile"].firstMatch.tap()
@@ -272,7 +310,7 @@ final class HubWalkthroughTests: WalkthroughCase {
             XCTAssertTrue(element("home.scenesLocked").exists, "the scenes note is missing for a guest")
             closeApp()
         }
-        controlCenter(prefix: "e1")
+        controlCenter(prefix: "e1", isGuest: true)
 
         // A profile picked by hand: personal items are there, greyed out, and do not open.
         launch(Hook.sample, Hook.audience("manual"), Hook.proximity("near"))
@@ -355,6 +393,13 @@ final class HubWalkthroughTests: WalkthroughCase {
         snapshot("f6-assistant-after-pull-from-top-center")
         XCTAssertTrue(element("hub.assistantOpen").exists, "a pull down from the top center did not open the assistant")
         closeAssistant()
+        pause(3)
+        snapshot("f7-home-screen-still-there-after-the-assistant")
+        XCTAssertTrue(app.scrollViews["hub.homeScreen"].exists, "the pull that opened the assistant also left the Home Screen")
+        // A pull from the leading part of the top edge is the one that goes back to the face.
+        edgeSwipe(fromX: 0.15, fromY: 0.01, toX: 0.15, toY: 0.4)
+        pause(4)
+        XCTAssertFalse(app.scrollViews["hub.homeScreen"].exists, "a pull down from the top edge did not return to the face")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -415,6 +460,28 @@ final class HubWalkthroughTests: WalkthroughCase {
     private func frames(_ name: String, count: Int) {
         for index in 1...count {
             snapshot("\(name)-\(index)")
+        }
+    }
+
+    /// Opens the sample recipe from the Home Screen and goes to a step that uses ingredients,
+    /// once the tidied recipe has arrived. Across the room there are no step buttons, so the
+    /// step is chosen before the cook steps back: the reader starts on the first step.
+    private func cookSampleRecipe() {
+        if !app.scrollViews["hub.homeScreen"].exists {
+            openHomeScreen()
+        }
+        guard tapApp("recipes") else { return }
+        let field = app.textFields["recipes.link"]
+        field.tap()
+        field.typeText("example.com/soup\n")
+        XCTAssertTrue(app.buttons["recipes.cook"].waitForExistence(timeout: 5), "the recipe's cover did not appear")
+        pause(4)
+        app.buttons["recipes.cook"].tap()
+        pause(1)
+        let next = app.buttons["recipes.next"]
+        if next.exists {
+            next.tap()
+            pause(1)
         }
     }
 
@@ -510,12 +577,16 @@ final class HubWalkthroughTests: WalkthroughCase {
     }
 
     /// Opens the control center from the status, captures it, and closes it by its backdrop.
-    private func controlCenter(prefix: String) {
+    private func controlCenter(prefix: String, isGuest: Bool = false) {
         app.buttons["hub.profile"].firstMatch.tap()
         pause(1.5)
         snapshot("\(prefix)0-control-center")
         XCTAssertTrue(app.buttons["control.night"].exists, "the control center did not open")
-        XCTAssertFalse(app.buttons["control.intercom"].exists, "Intercom has a control with nothing behind it")
+        if isGuest {
+            XCTAssertFalse(app.buttons["control.intercom"].exists, "a guest has the Intercom control, which is for members")
+        } else {
+            note("Intercom control in the control center: \(app.buttons["control.intercom"].exists)")
+        }
         let quiet = app.buttons["control.quiet"]
         if quiet.exists {
             quiet.tap()

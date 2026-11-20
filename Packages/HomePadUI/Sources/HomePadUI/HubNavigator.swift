@@ -121,8 +121,8 @@ public final class HubNavigator {
         }
     }
 
-    func personChanged(from previous: UUID?, to current: UUID?) {
-        state.personChanged(from: previous, to: current)
+    func audienceSignedOut() {
+        state.audienceSignedOut()
     }
 
     func audienceChanged(_ context: AudienceContext) {

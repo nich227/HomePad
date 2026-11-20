@@ -31,13 +31,12 @@ struct AnalogFace: View {
     var body: some View {
         let detailed = density.showsLabels
         let numerals = options.analogNumerals
+        let topInset = metrics.topBar * 0.85
         ZStack {
             Canvas { context, size in
                 // The hands turn on a circle. The numerals sit toward the edges of whatever
                 // shape the screen is, so a wide screen is filled edge to edge.
-                let radius = min(size.width, size.height) / 2
-                let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                let stretch = CGSize(width: size.width / 2 / radius, height: size.height / 2 / radius)
+                let (center, radius, stretch) = ClockDrawing.dial(in: size, topInset: topInset)
                 let angles = ClockHandAngles(reading: ClockReading(date: date, calendar: calendar), sweeps: sweeps)
                 if options.analogShowsTicks {
                     ClockDrawing.ticks(context, center: center, radius: radius * 0.97, hoursOnly: false, color: inkColor, width: radius * 0.012)
@@ -79,6 +78,7 @@ struct AnalogFace: View {
 struct FadeFace: View {
     let date: Date
     let sweeps: Bool
+    @Environment(\.hubMetrics) private var metrics
     @Environment(\.faceDensity) private var density
     @Environment(\.hubPreferences) private var preferences
     @Environment(\.calendar) private var calendar
@@ -94,10 +94,9 @@ struct FadeFace: View {
 
     var body: some View {
         let colors = palette
+        let topInset = metrics.topBar * 0.85
         Canvas { context, size in
-            let radius = min(size.width, size.height) / 2
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let stretch = CGSize(width: size.width / 2 / radius, height: size.height / 2 / radius)
+            let (center, radius, stretch) = ClockDrawing.dial(in: size, topInset: topInset)
             let angles = ClockHandAngles(reading: ClockReading(date: date, calendar: calendar), sweeps: sweeps)
             let spread: Double = density.showsLabels ? 115 : 75
             for hour in 1...12 {

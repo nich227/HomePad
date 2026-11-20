@@ -149,8 +149,8 @@ While `isAvailable()` is true the hub shows a sparkles button in the status area
 pull down from the middle of the top edge opens it too. The overlay is drawn above everything,
 including a beam takeover, over the whole pane, and the hub passes it the closure that closes
 it. A swipe up from the bottom edge and the idle timer also close it. Night Mode's tint is
-applied above it, so it is red at night without doing anything itself. The hub never names the
-assistant: its labels say "Assistant".
+not applied to it: the app passes it `HubNavigator.isNightMode` and it draws itself red. The
+hub never names the assistant: its labels say "Assistant".
 
 ### Touch ID unlock
 
@@ -252,7 +252,7 @@ Other rules by orientation: the Flow face puts its four digits in one row when w
 otherwise; the Calendar face puts the large date beside the month when wide and above it when
 tall; Music and the Home app put their two halves side by side when wide and stacked otherwise;
 Analog and Fade keep round hands and move the numerals toward the edges of whatever shape the
-screen is.
+screen is, and start below the pill and the status so those never cover the twelve.
 
 ### Chrome on the canvas
 
@@ -556,12 +556,14 @@ started.
 | Home Screen, or an app with nothing playing | No touch for the idle period (`.idle`) | Face. Overlays close too |
 | App while music plays; Recipes; Mirror | No touch for the idle period | Stays. A recipe is read, and a mirror watched, without touching |
 | Anything | Who may see what changes (`audienceChanged`) | An app the person may not see closes to the Home Screen |
-| A beam takeover, the Beam app, or a personal app | The member the hub is personalized for leaves, or another person takes their place (`personChanged`) | The takeover closes, and the app gives way to the face. Someone arriving at a hub that showed a guest changes nothing |
+| A beam takeover, the Beam app, or a personal app | The audience signs out: `HouseholdSession.audienceGeneration` changes (`audienceSignedOut`) | The takeover closes, and the app gives way to the face. A member the camera lost for a moment is still signed in, and nothing closes for them |
 | Anything | A page arrives (`presentTakeover`) | The beam slot covers the screen until closed |
 | Anything | `showFace(_:enabled:)` from outside | Faces in front on that face; an open assistant stays |
 
 A vertical drag that starts away from the top and bottom edges is not an event, so scrolling
-inside an app or the Home Screen is never taken for a swipe. The idle period is
+inside an app or the Home Screen is never taken for a swipe. A drag that starts where it opens
+the control center or the assistant (`HubGesture.startsOverlay`) does only that: the Home
+Screen under it does not also take it as a pull down to the face. The idle period is
 `ui.display.idleReturn`. Recognition does not move the hub by itself: there is no "open the
 Home Screen when recognized" setting.
 
@@ -603,6 +605,11 @@ active profile's name (or Guest), one row of the person's widgets, and a grid of
 scrolls up and down with the system's scroll physics. The grid fades out toward the top and
 bottom edges, and a small pill on the trailing edge follows the scroll position. Drag an icon or
 widget onto another to reorder; the order is saved per profile.
+
+The face behind is a backdrop, not a picture: it is scaled up, has its contrast halved and its
+saturation raised, and is blurred by `token(104)` under a 30% black overlay, so a white tile or a
+dark camera picture on the face becomes an even wash of the face's color instead of a patch under
+the icons. In Night Mode the backdrop is black.
 
 The roster, in order: Home, Music, Calendar (when supplied), Beam, Photos, Timers, Alarms,
 Intercom (when supplied), Weather, Recipes, Mirror, Clock, iPhone Apps, People and Pairing
@@ -789,9 +796,12 @@ outside the window and a lit room cancels it inside). An override (`NightOverrid
 the schedule's next start or end hour, or twelve hours when the schedule has no hours, and is
 gone after a relaunch.
 
-**How.** It is applied in one place, at the root of the hub, by `hubNightTint`: the whole view
-tree, including views from other packages and the assistant's overlay, is drawn through
-`grayscale(1)`, a little added contrast, and `colorMultiply` with the red. That alone would
+**How.** It is decided in one place, at the root of the hub, which sets `\.hubIsNight` and puts
+everything the hub draws and every view it hosts through one filter (`hubNightFilter`):
+`grayscale(1)`, a little added contrast, and `colorMultiply` with the red. The assistant's
+overlay is the one exception. The filter shows a view by its brightness, so something already
+red comes out at about a third of its brightness. An assistant from another package is
+therefore left out of the filter and has to draw itself red, from `HubNavigator.isNightMode`. That alone would
 leave light backgrounds as red fields, so the same modifier sets `\.hubIsNight`, and the views
 that draw a background read it and draw black: wallpapers, the weather sky, the Flow field, the
 Calendar's paper, the Rainbow's stripes, colored clock dials, the Music backdrop, the scrims.

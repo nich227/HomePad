@@ -33,6 +33,9 @@ final class HubModel {
     /// Night Mode switched by hand. In memory only, and gone at the next start or end hour.
     @ObservationIgnored private var nightOverride: NightOverride?
     @ObservationIgnored private(set) var lastInteraction = Date()
+    /// True while a finger is down in a drag that began where a swipe opens the control center
+    /// or the assistant. Whatever is under the finger leaves that drag alone.
+    @ObservationIgnored var dragStartsOverlay = false
     @ObservationIgnored private var lastSummary: HubStatusSummary?
     @ObservationIgnored private var welcomeFinished = false
     @ObservationIgnored private var recognizedUntil: Date?

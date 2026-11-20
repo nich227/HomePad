@@ -245,6 +245,14 @@ extension View {
     func hubNightTint(_ isNight: Bool) -> some View {
         self
             .environment(\.hubIsNight, isNight)
+            .hubNightFilter(isNight)
+    }
+
+    /// The color part of Night Mode on its own: whatever is drawn is reduced to its brightness
+    /// and shown in red. Something that is already red comes out much darker, so a view that
+    /// draws itself red for the night is left out of this and trusted to do so.
+    func hubNightFilter(_ isNight: Bool) -> some View {
+        self
             .grayscale(isNight ? 1 : 0)
             .contrast(isNight ? 1.3 : 1)
             .colorMultiply(isNight ? Color.hubNightRed : .white)

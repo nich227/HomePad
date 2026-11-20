@@ -9,6 +9,7 @@ struct HomeApp: View {
     let onClose: () -> Void
     @Environment(\.hubMetrics) private var metrics
     @Environment(\.hubMayRunScenes) private var mayRunScenes
+    @Environment(\.hubAudience) private var audience
     @Environment(\.hubMotion) private var motion
     @Environment(HubEnvironment.self) private var environment
     /// Nil shows the whole home.
@@ -134,7 +135,7 @@ struct HomeApp: View {
     }
 
     private func grid(_ tiles: [HomeTile], snapshot: HomeSnapshot, width: CGFloat) -> some View {
-        let count = max(2, Int((width / metrics.token(112)).rounded(.down)))
+        let count = max(2, Int((width / metrics.token(128)).rounded(.down)))
         let cell = (width - metrics.gutter * CGFloat(count - 1)) / CGFloat(count)
         return ScrollView {
             GlassEffectContainer(spacing: metrics.gutter) {
@@ -152,7 +153,10 @@ struct HomeApp: View {
                     .padding(.top, metrics.token(40))
             }
             if !mayRunScenes, room == nil, !snapshot.scenes.isEmpty {
-                Label("Scenes run only for household members the hub recognizes.", systemImage: "lock.fill")
+                Label(
+                    audience.isGuest ? "Scenes run only for household members the hub recognizes." : "Scenes run when the hub recognizes your face.",
+                    systemImage: "lock.fill"
+                )
                     .font(.system(size: metrics.textToken(DesignTokens.tileSubtitle), weight: .medium))
                     .foregroundStyle(Color.hubSecondaryText)
                     .frame(maxWidth: .infinity, alignment: .leading)

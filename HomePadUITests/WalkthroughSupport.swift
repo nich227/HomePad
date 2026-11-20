@@ -19,6 +19,10 @@ class WalkthroughCase: XCTestCase {
     /// Put in front of every screenshot name.
     var snapshotPrefix: String { "" }
 
+    /// Set by a test that turns the device on its side, in case the device does not say so
+    /// when a screenshot is saved.
+    var capturesLandscape = false
+
     /// False where the app is framed smaller than the window, so the window's edges are not
     /// the hub's edges.
     var usesEdgeSwipes: Bool { true }
@@ -76,11 +80,30 @@ class WalkthroughCase: XCTestCase {
         app.launch()
     }
 
-    /// Closes the assistant, whichever one is filling the slot: the stand-in closes on a tap,
-    /// and any assistant closes on a swipe up from the bottom edge.
+    /// Types one request into the assistant and waits for its answer. The assistant answers
+    /// from a script in UI tests.
+    func askAssistant(_ request: String) {
+        let field = app.textFields["assistant-field"]
+        guard field.waitForExistence(timeout: 5) else {
+            note("the assistant has no text field; it may be the stand-in")
+            return
+        }
+        field.tap()
+        field.typeText(request + "\n")
+        if !element("assistant-answer").waitForExistence(timeout: 10) {
+            note("the assistant did not answer \"\(request)\"")
+        }
+        pause(1.5)
+    }
+
+    /// Closes the assistant, whichever one is filling the slot: by its own close button, by a
+    /// tap on the stand-in, or by a swipe up from the bottom edge.
     func closeAssistant() {
+        let close = app.buttons["assistant-close"]
         let sample = element("assistant.sample")
-        if sample.exists {
+        if close.exists {
+            close.tap()
+        } else if sample.exists {
             sample.tap()
         } else {
             edgeSwipe(fromX: 0.5, fromY: 0.985, toX: 0.5, toY: 0.55)
@@ -132,7 +155,35 @@ class WalkthroughCase: XCTestCase {
         guard let directory = screenshotDirectory else { return }
         let url = URL(fileURLWithPath: directory).appendingPathComponent("\(name).png")
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
-        try? screenshot.pngRepresentation.write(to: url)
+        try? upright(screenshot.image).pngData()?.write(to: url)
+    }
+
+    /// The screen is captured the way the panel is mounted, so a landscape run gives pixels on
+    /// their side, sometimes with a note of how to turn them and sometimes without. The saved
+    /// file holds the pixels the way a person sees them.
+    private func upright(_ image: UIImage) -> UIImage {
+        // First apply whatever orientation the image carries.
+        var flat = image
+        if image.imageOrientation != .up {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = image.scale
+            format.opaque = true
+            flat = UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+                image.draw(in: CGRect(origin: .zero, size: image.size))
+            }
+        }
+        let orientation = XCUIDevice.shared.orientation
+        guard orientation.isLandscape || capturesLandscape, flat.size.height > flat.size.width else { return flat }
+        // Still on its side: turn it.
+        let size = CGSize(width: flat.size.height, height: flat.size.width)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = flat.scale
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            context.cgContext.translateBy(x: size.width / 2, y: size.height / 2)
+            context.cgContext.rotate(by: orientation == .landscapeRight ? .pi / 2 : -.pi / 2)
+            flat.draw(in: CGRect(x: -flat.size.width / 2, y: -flat.size.height / 2, width: flat.size.width, height: flat.size.height))
+        }
     }
 
     /// Swipes up from the bottom edge, the way a person gets to the Home Screen. The bar at the

@@ -44,7 +44,7 @@ struct HomeTileView: View {
             let symbol = accessory.kind == .lock ? (accessory.isOn ? "lock.fill" : "lock.open.fill") : accessory.kind.symbolName
             return (symbol, accessory.name, accessory.roomName)
         case .scene(let scene):
-            return (scene.symbolName, scene.name, isLockedScene ? String(localized: "Members only") : String(localized: "Scene"))
+            return (scene.symbolName, scene.name, isLockedScene ? (audience.isGuest ? String(localized: "Members only") : String(localized: "Locked")) : String(localized: "Scene"))
         case .camera(let camera):
             return ("video.fill", camera.name, camera.roomName)
         }
@@ -90,7 +90,7 @@ struct HomeTileView: View {
         .hoverEffect(.highlight)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: "\(info.title), \(info.subtitle)"))
-        .accessibilityHint(isLockedScene ? Text("Scenes run only for household members the hub recognizes.") : Text(verbatim: ""))
+        .accessibilityHint(isLockedScene ? Text("Scenes run when the hub recognizes a household member's face.") : Text(verbatim: ""))
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
         .accessibilityAction(named: "Open Controls", openDetail)
         .accessibilityIdentifier("home.tile.\(tile.id)")

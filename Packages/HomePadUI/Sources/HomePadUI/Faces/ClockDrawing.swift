@@ -4,6 +4,15 @@ import SwiftUI
 /// Draws clock hands in the style the hub uses everywhere: a thin stem at the center and a
 /// rounded bar out to the tip.
 enum ClockDrawing {
+    /// Where a full-screen dial is drawn: under the pill and the status at the top, so they
+    /// never cover the twelve. The hands turn on a circle and the numerals sit toward the edges
+    /// of whatever shape is left.
+    static func dial(in size: CGSize, topInset: CGFloat) -> (center: CGPoint, radius: CGFloat, stretch: CGSize) {
+        let height = max(size.height - topInset, 1)
+        let radius = max(min(size.width, height) / 2, 1)
+        return (CGPoint(x: size.width / 2, y: topInset + height / 2), radius, CGSize(width: size.width / 2 / radius, height: height / 2 / radius))
+    }
+
     static func point(center: CGPoint, radius: CGFloat, degrees: Double, fraction: CGFloat) -> CGPoint {
         let radians = degrees * .pi / 180
         return CGPoint(x: center.x + CGFloat(sin(radians)) * radius * fraction, y: center.y - CGFloat(cos(radians)) * radius * fraction)

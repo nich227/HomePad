@@ -212,12 +212,12 @@ public struct HubNavigationState: Equatable, Sendable {
         }
     }
 
-    /// Call when the person the hub is personalized for changes. When a member leaves, or
-    /// another person takes their place, nothing of theirs stays in front for whoever is next:
-    /// a page that took over the screen closes, and the browser or a personal app gives way
-    /// to the face. Someone arriving at a hub that was showing a guest changes nothing.
-    public mutating func personChanged(from previous: UUID?, to current: UUID?) {
-        guard let previous, previous != current else { return }
+    /// Call when the audience signs out: a member's wait after the camera lost them ran out,
+    /// another person took their place, someone switched profiles by hand, or the hub was
+    /// locked. Nothing of theirs stays in front for whoever is next: a page that took over the
+    /// screen closes, and the browser or a personal app gives way to the face. Losing sight of
+    /// someone for a moment is not a sign out and must not be reported here.
+    public mutating func audienceSignedOut() {
         isTakeoverPresented = false
         if case .app(let app) = surface, app == .beam || app.access == .personal {
             overlay = nil
@@ -281,6 +281,14 @@ public enum HubGesture {
             return .openAssistant
         }
         return .swipeDown
+    }
+
+    /// Whether a drag that starts here and goes down opens something over the screen: the
+    /// control center from the top trailing corner, or the assistant from the top center. Such
+    /// a drag must do only that, so whatever is under it does not also take it as a pull down.
+    public static func startsOverlay(startX: Double, startY: Double, width: Double, height: Double, isAssistantAvailable: Bool) -> Bool {
+        let event = event(startX: startX, startY: startY, translationX: 0, translationY: threshold, width: width, height: height, isAssistantAvailable: isAssistantAvailable)
+        return event == .swipeDownFromTopTrailing || event == .openAssistant
     }
 }
 

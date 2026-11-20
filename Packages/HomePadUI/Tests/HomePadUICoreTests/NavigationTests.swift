@@ -246,39 +246,29 @@ import Testing
     }
 }
 
-@Suite struct HubPersonChangeTests {
-    private let erica = UUID()
-    private let danny = UUID()
-
-    @Test func personChanged_whenAMemberLeavesOrIsReplaced_thenTheirPageAndBrowserGiveWayToTheFace() {
+@Suite struct HubSignOutTests {
+    @Test func signedOut_whenAPageOrTheBrowserOrAPersonalAppIsInFront_thenItGivesWayToTheFace() {
         var takeover = HubNavigationState(surface: .app(.timers), isTakeoverPresented: true)
-        takeover.personChanged(from: erica, to: nil)
+        takeover.audienceSignedOut()
         #expect(takeover == HubNavigationState(surface: .app(.timers)))
         var browser = HubNavigationState(surface: .app(.beam), overlay: .controlCenter)
-        browser.personChanged(from: erica, to: danny)
+        browser.audienceSignedOut()
         #expect(browser == HubNavigationState(surface: .faces))
         var personal = HubNavigationState(surface: .app(.projectedApps))
-        personal.personChanged(from: erica, to: danny)
+        personal.audienceSignedOut()
         #expect(personal.surface == .faces)
     }
 
-    @Test func personChanged_whenNothingOfTheirsIsInFront_thenNothingMoves() {
+    @Test func signedOut_whenNothingOfTheirsIsInFront_thenNothingMoves() {
         var music = HubNavigationState(surface: .app(.music), overlay: .controlCenter)
-        music.personChanged(from: erica, to: nil)
+        music.audienceSignedOut()
         #expect(music == HubNavigationState(surface: .app(.music), overlay: .controlCenter))
         var home = HubNavigationState(surface: .homeScreen)
-        home.personChanged(from: erica, to: danny)
+        home.audienceSignedOut()
         #expect(home.surface == .homeScreen)
-    }
-
-    @Test func personChanged_whenSomeoneArrivesOrItIsTheSamePerson_thenNothingCloses() {
-        var arriving = HubNavigationState(surface: .app(.beam), isTakeoverPresented: true)
-        arriving.personChanged(from: nil, to: erica)
-        #expect(arriving == HubNavigationState(surface: .app(.beam), isTakeoverPresented: true))
-        arriving.personChanged(from: erica, to: erica)
-        #expect(arriving.isTakeoverPresented && arriving.surface == .app(.beam))
-        arriving.personChanged(from: nil, to: nil)
-        #expect(arriving.isTakeoverPresented)
+        var face = HubNavigationState(overlay: .facePicker)
+        face.audienceSignedOut()
+        #expect(face == HubNavigationState(overlay: .facePicker))
     }
 }
 
@@ -303,6 +293,17 @@ import Testing
         #expect(event(x: 300, y: 10, dy: 200, assistant: true) == .swipeDown)
         #expect(event(x: 900, y: 10, dy: 200, assistant: true) == .swipeDownFromTopTrailing)
         #expect(event(x: 500, y: 400, dy: 200) == nil)
+    }
+
+    @Test func startsOverlay_whenADragBeginsInTheTopTrailingCornerOrTheAssistantsZone_thenTrue() {
+        func starts(x: Double, y: Double, assistant: Bool) -> Bool {
+            HubGesture.startsOverlay(startX: x, startY: y, width: 1000, height: 800, isAssistantAvailable: assistant)
+        }
+        #expect(starts(x: 900, y: 10, assistant: false))
+        #expect(starts(x: 500, y: 10, assistant: true))
+        #expect(!starts(x: 500, y: 10, assistant: false))
+        #expect(!starts(x: 100, y: 10, assistant: true))
+        #expect(!starts(x: 900, y: 400, assistant: true))
     }
 
     @Test func drag_whenShortOrSideways_thenNothing() {
