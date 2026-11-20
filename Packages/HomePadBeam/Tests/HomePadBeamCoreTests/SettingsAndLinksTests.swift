@@ -262,6 +262,28 @@ import Testing
         #expect(BrowserDataStore.choice(isPersonalContentUnlocked: true, activeProfileID: Fixture.profileID) == .profile(Fixture.profileID))
     }
 
+    private func decide(
+        _ text: String,
+        mainFrame: Bool? = true,
+        download: Bool = false,
+        trigger: BeamNavigationPolicy.Trigger = .other,
+        isGet: Bool = true,
+        from current: String? = nil,
+        own: Bool = true,
+        policy: BeamURLPolicy = BeamURLPolicy()
+    ) -> BeamNavigationPolicy.Decision {
+        BeamNavigationPolicy.decide(
+            url: URL(string: text),
+            targetsMainFrame: mainFrame,
+            isDownload: download,
+            trigger: trigger,
+            isGet: isGet,
+            currentURL: current.flatMap(URL.init(string:)),
+            isOwnRequest: own,
+            policy: policy
+        )
+    }
+
     @Test(arguments: [
         ("https://example.com", true as Bool?, false, BeamNavigationPolicy.Decision.allow),
         ("http://example.com", true, false, .allow),
@@ -275,24 +297,79 @@ import Testing
         ("blob:https://example.com/1", false, false, .allow),
         ("data:text/html,hi", false, false, .allow),
         ("file:///etc/passwd", false, false, .cancel),
-        ("https://example.com/new", nil, false, .loadInPlace),
+        ("tel:5551234", false, false, .cancel),
+        ("https://example.com/new", nil, false, .openInNewPage),
         ("mailto:a@example.com", nil, false, .cancel),
         ("/relative", true, false, .cancel),
         ("http://192.168.1.1/admin", true, false, .cancel),
         ("http://192.168.1.1/admin", nil, false, .cancel),
         ("https://user:pw@example.com/", true, false, .cancel),
         ("http://192.168.1.1/frame", false, false, .allow),
+        ("https://example.com/chair.usdz", true, false, .cancel),
+        ("https://example.com/room.REALITY?x=1", nil, false, .cancel),
     ])
     func decide_whenNavigationRequested_thenFollowsOnlyWebContent(text: String, mainFrame: Bool?, download: Bool, expected: BeamNavigationPolicy.Decision) {
-        #expect(BeamNavigationPolicy.decide(url: URL(string: text), targetsMainFrame: mainFrame, isDownload: download, policy: BeamURLPolicy()) == expected)
+        #expect(decide(text, mainFrame: mainFrame, download: download) == expected)
     }
 
     @Test func decide_whenNoURL_thenCancels() {
-        #expect(BeamNavigationPolicy.decide(url: nil, targetsMainFrame: true, isDownload: false, policy: BeamURLPolicy()) == .cancel)
+        #expect(BeamNavigationPolicy.decide(
+            url: nil, targetsMainFrame: true, isDownload: false, trigger: .other, isGet: true, currentURL: nil, isOwnRequest: true, policy: BeamURLPolicy()
+        ) == .cancel)
     }
 
-    @Test func decide_whenLocalHostsAllowed_thenFollowsLocalNavigation() throws {
-        let local = try #require(URL(string: "http://192.168.1.1/recipes"))
-        #expect(BeamNavigationPolicy.decide(url: local, targetsMainFrame: true, isDownload: false, policy: BeamURLPolicy(allowsLocalHosts: true)) == .allow)
+    @Test func decide_whenLocalHostsAllowed_thenFollowsLocalNavigation() {
+        #expect(decide("http://192.168.1.1/recipes", policy: BeamURLPolicy(allowsLocalHosts: true)) == .allow)
+    }
+
+    @Test(arguments: [BeamNavigationPolicy.Trigger.link, .other])
+    func decide_whenPageSendsThePersonToAnotherSite_thenTheAppLoadsItItself(trigger: BeamNavigationPolicy.Trigger) {
+        let page = "https://example.com/list"
+        #expect(decide("https://maps.example.org/place", trigger: trigger, from: page, own: false) == .loadInPlace)
+        #expect(decide("http://example.com/list", trigger: trigger, from: page, own: false) == .loadInPlace)
+        #expect(decide("https://example.com:8443/list", trigger: trigger, from: page, own: false) == .loadInPlace)
+        #expect(decide("https://example.com/first", trigger: trigger, from: nil, own: false) == .loadInPlace)
+        #expect(decide("https://EXAMPLE.com/next", trigger: trigger, from: page, own: false) == .allow)
+        #expect(decide("https://maps.example.org/place", trigger: trigger, from: page, own: true) == .allow)
+        #expect(decide("tel:5551234", trigger: trigger, from: page, own: false) == .cancel)
+    }
+
+    @Test(arguments: [BeamNavigationPolicy.Trigger.form, .backForward, .reload])
+    func decide_whenNavigationCannotBeAnAppLink_thenAllowedAsIs(trigger: BeamNavigationPolicy.Trigger) {
+        #expect(decide("https://other.example.org/", trigger: trigger, from: "https://example.com/", own: false) == .allow)
+    }
+
+    @Test func decide_whenRequestCarriesABody_thenNotLoadedAgain() {
+        #expect(decide("https://other.example.org/", trigger: .other, isGet: false, from: "https://example.com/", own: false) == .allow)
+    }
+
+    @Test func allowsResponse_whenNotShowableOrAnAttachment_thenRefused() {
+        #expect(BeamNavigationPolicy.allowsResponse(canShowMimeType: true, contentDisposition: nil))
+        #expect(BeamNavigationPolicy.allowsResponse(canShowMimeType: true, contentDisposition: "inline; filename=a.pdf"))
+        #expect(!BeamNavigationPolicy.allowsResponse(canShowMimeType: false, contentDisposition: nil))
+        #expect(!BeamNavigationPolicy.allowsResponse(canShowMimeType: true, contentDisposition: " Attachment; filename=a.pdf"))
+    }
+
+    @Test func sendBackTarget_whenPageCameFromAConnectedPhone_thenThatPhoneUnlessItIsAnotherMembers() {
+        let other = UUID()
+        let mine = PeerDevice(id: Fixture.phoneID, name: "Ada", role: .companion, profileID: Fixture.profileID)
+        let shared = PeerDevice(id: Fixture.otherPhoneID, name: "Spare", role: .companion)
+        let theirs = PeerDevice(id: other, name: "Bo", role: .companion, profileID: other)
+        let owner = BrowserOwner.member(Fixture.profileID)
+        let all = [theirs, shared, mine]
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: shared.id), owner: owner, connected: all) == shared)
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: mine.id), owner: owner, connected: all) == mine)
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: theirs.id), owner: owner, connected: all) == mine)
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: shared.id), owner: owner, connected: [theirs, mine]) == mine)
+        #expect(SendBackPolicy.target(pageSource: .handoff, owner: owner, connected: all) == mine)
+        #expect(SendBackPolicy.target(pageSource: nil, owner: owner, connected: [theirs, shared]) == nil)
+    }
+
+    @Test func sendBackTarget_whenGuest_thenOnlyThePhoneThePageCameFrom() {
+        let mine = PeerDevice(id: Fixture.phoneID, name: "Ada", role: .companion, profileID: Fixture.profileID)
+        let shared = PeerDevice(id: Fixture.otherPhoneID, name: "Spare", role: .companion)
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: shared.id), owner: .guest, connected: [mine, shared]) == shared)
+        #expect(SendBackPolicy.target(pageSource: .peerLink(deviceID: mine.id), owner: .guest, connected: [mine, shared]) == nil)
+        #expect(SendBackPolicy.target(pageSource: .deepLink, owner: .guest, connected: [mine, shared]) == nil)
     }
 }

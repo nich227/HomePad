@@ -13,6 +13,8 @@ enum Fixture {
     static let phoneID = UUID(uuidString: "11111111-2222-3333-4444-555555555555") ?? UUID()
     static let otherPhoneID = UUID(uuidString: "99999999-2222-3333-4444-555555555555") ?? UUID()
     static let profileID = UUID(uuidString: "ABABABAB-0000-0000-0000-000000000001") ?? UUID()
+    static let otherProfileID = UUID(uuidString: "ABABABAB-0000-0000-0000-000000000002") ?? UUID()
+    static let household: Set<UUID> = [profileID, otherProfileID]
     static let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     static func secret(_ fill: UInt8 = 1) -> PairingSecret {
@@ -50,5 +52,24 @@ enum Fixture {
 
     static func validated(_ text: String, policy: BeamURLPolicy = BeamURLPolicy()) -> ValidatedURL? {
         try? policy.validate(text).get()
+    }
+
+    static func approved(
+        _ url: String = "https://example.com/recipe?id=1",
+        id: UUID = UUID(),
+        sender: PeerDevice = phone,
+        title: String? = "Soup",
+        kind: BeamKind = .website,
+        source: BeamSource = .peerLink(deviceID: phoneID)
+    ) -> ApprovedBeam {
+        let payload = BeamPayload(id: id, url: URL(string: url) ?? URL(fileURLWithPath: "/"), title: title, sender: sender, sentAt: now, kind: kind)
+        guard let validated = validated(url) else {
+            preconditionFailure("fixture pages must pass the URL policy")
+        }
+        return ApprovedBeam(payload: payload, url: validated, source: source)
+    }
+
+    static func presence(_ profileID: UUID?, generation: Int = 0) -> HubPresence {
+        HubPresence(activeProfileID: profileID, audienceGeneration: generation)
     }
 }

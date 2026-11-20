@@ -28,6 +28,10 @@ public final class SharePlayCoordinator {
     /// Whether the device is in a call or nearby session that can start SharePlay right away.
     public private(set) var isEligibleForGroupSession = false
 
+    /// Whether this device may show the system sheet that invites people to a session. False on
+    /// a hub, where a session can only start inside a call that is already under way.
+    public private(set) var allowsInvitations = true
+
     /// What the local browser should do when someone else navigates, scrolls, or closes the page.
     @ObservationIgnored public var onAction: ((SharedBrowsingAction) -> Void)?
 
@@ -50,15 +54,22 @@ public final class SharePlayCoordinator {
     private var preferences: BeamPreferences { BeamPreferences.read(from: settings) }
     public var isEnabled: Bool { preferences.sharePlayEnabled }
 
-    /// On the hub, shows pages the session navigates to in the hub's browser and closes it when
-    /// the session's page is closed.
+    /// On the hub, shows the session's page in the browser of the person in front of it and
+    /// closes that page when the session's page is closed. The hub leaves the session when that
+    /// person signs out, so the next person is not shown what the session browses. The hub also
+    /// stops offering to invite people, because that hands a link to another app.
     public func attach(to receiver: BeamReceiver) {
+        allowsInvitations = false
         onAction = { [weak receiver] action in
             switch action {
             case .load(let url, let title): receiver?.open(sharePlay: url, title: title)
-            case .close: receiver?.closeBrowser()
+            case .close: receiver?.closeSharedPage()
             case .scroll: break
             }
+        }
+        receiver.onSignOut = { [weak self] _ in
+            guard let self, self.isActive else { return }
+            self.leave()
         }
     }
 

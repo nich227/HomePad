@@ -40,7 +40,9 @@ extension BeamOutcome {
     var message: String {
         switch self {
         case .opened: String(localized: "Opened on the hub.")
-        case .awaitingApproval: String(localized: "Sent. Waiting for someone at the hub to open it.")
+        case .awaitingApproval: String(localized: "Sent. The hub is asking before it opens the page.")
+        case .waitingForOwner: String(localized: "Sent. It is waiting for you at the hub and opens when the hub sees you.")
+        case .expired: String(localized: "The hub stopped holding the page. Send it again when you are at the hub.")
         case .declined: String(localized: "Someone at the hub declined the page.")
         case .rateLimited: String(localized: "Too many pages sent at once. Try again in a moment.")
         case .rejected(let reason): reason.message

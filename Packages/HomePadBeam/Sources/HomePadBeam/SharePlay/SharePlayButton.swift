@@ -28,6 +28,21 @@ public struct SharePlayButton: View {
         if coordinator.isEnabled, let validated {
             if coordinator.isActive {
                 Button("Stop Browsing Together", systemImage: "shareplay.slash") { coordinator.leave() }
+            } else if !coordinator.allowsInvitations {
+                // A hub has no sheet for picking people and nothing for the system to offer, so
+                // the button is there only while a call can take the page.
+                if coordinator.isEligibleForGroupSession {
+                    Button("Browse Together", systemImage: "shareplay") {
+                        Task {
+                            if await coordinator.startSharing(validated, title: title) == .failed {
+                                didFail = true
+                            }
+                        }
+                    }
+                    .alert(Text("SharePlay could not start"), isPresented: $didFail) {
+                        Button("OK", role: .cancel) {}
+                    }
+                }
             } else {
                 Button("Browse Together", systemImage: "shareplay") {
                     Task {

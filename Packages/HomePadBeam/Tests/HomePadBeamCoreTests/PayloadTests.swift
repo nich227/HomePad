@@ -53,7 +53,7 @@ import Testing
     }
 
     @Test(arguments: [
-        BeamOutcome.opened, .awaitingApproval, .declined, .rateLimited, .unknown, .rejected(.localHost), .rejected(.unsupportedScheme),
+        BeamOutcome.opened, .awaitingApproval, .waitingForOwner, .expired, .declined, .rateLimited, .unknown, .rejected(.localHost), .rejected(.unsupportedScheme),
     ])
     func receipt_whenRoundTripped_thenEqual(outcome: BeamOutcome) throws {
         let receipt = BeamReceipt(beamID: Fixture.phoneID, outcome: outcome)
@@ -100,7 +100,10 @@ import Testing
         let opened = BeamReceipt(beamID: id, outcome: .opened)
         #expect(BeamDeliveryState.sending.applying(opened, to: id) == .delivered(.opened))
         #expect(BeamDeliveryState.delivered(.awaitingApproval).applying(opened, to: id) == .delivered(.opened))
+        #expect(BeamDeliveryState.delivered(.waitingForOwner).applying(opened, to: id) == .delivered(.opened))
         #expect(BeamDeliveryState.failed(.noReceipt).applying(opened, to: id) == .delivered(.opened))
+        let expired = BeamReceipt(beamID: id, outcome: .expired)
+        #expect(BeamDeliveryState.delivered(.waitingForOwner).applying(expired, to: id) == .delivered(.expired))
     }
 
     @Test func applying_whenReceiptIsForAnotherBeamOrStateIsFinal_thenUnchanged() {
@@ -114,6 +117,8 @@ import Testing
     @Test func isSuccess_whenOpenedOrWaiting_thenTrue() {
         #expect(BeamDeliveryState.delivered(.opened).isSuccess)
         #expect(BeamDeliveryState.delivered(.awaitingApproval).isSuccess)
+        #expect(BeamDeliveryState.delivered(.waitingForOwner).isSuccess)
+        #expect(!BeamDeliveryState.delivered(.expired).isSuccess)
         #expect(!BeamDeliveryState.delivered(.rateLimited).isSuccess)
         #expect(!BeamDeliveryState.sending.isSuccess)
         #expect(!BeamDeliveryState.failed(.noPairedHub).isSuccess)

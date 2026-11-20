@@ -54,6 +54,11 @@ public struct BeamPayload: Identifiable, Codable, Equatable, Sendable {
 public enum BeamOutcome: Equatable, Sendable {
     case opened
     case awaitingApproval
+    /// The page is held for the household member the sending iPhone belongs to, and opens or
+    /// is offered once that person is in front of the hub. Nobody else is shown it.
+    case waitingForOwner
+    /// The hub stopped holding the page before its owner came to it.
+    case expired
     case declined
     case rateLimited
     case rejected(BeamURLRejection)
@@ -82,6 +87,8 @@ public struct BeamReceipt: Codable, Equatable, Sendable {
         switch status {
         case "opened": outcome = .opened
         case "awaitingApproval": outcome = .awaitingApproval
+        case "waitingForOwner": outcome = .waitingForOwner
+        case "expired": outcome = .expired
         case "declined": outcome = .declined
         case "rateLimited": outcome = .rateLimited
         case "rejected": outcome = .rejected(reason.flatMap(BeamURLRejection.init(rawValue:)) ?? .malformed)
@@ -95,6 +102,8 @@ public struct BeamReceipt: Codable, Equatable, Sendable {
         switch outcome {
         case .opened: try container.encode("opened", forKey: .status)
         case .awaitingApproval: try container.encode("awaitingApproval", forKey: .status)
+        case .waitingForOwner: try container.encode("waitingForOwner", forKey: .status)
+        case .expired: try container.encode("expired", forKey: .status)
         case .declined: try container.encode("declined", forKey: .status)
         case .rateLimited: try container.encode("rateLimited", forKey: .status)
         case .unknown: try container.encode("unknown", forKey: .status)

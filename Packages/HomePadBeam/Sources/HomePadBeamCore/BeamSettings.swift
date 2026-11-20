@@ -29,7 +29,7 @@ public enum BeamSettings {
                 .init(title: "Ask First", value: BeamApprovalMode.askFirst.rawValue),
                 .init(title: "Open Immediately", value: BeamApprovalMode.openImmediately.rawValue),
             ],
-            footer: "The hub always asks for the first page from a newly paired iPhone and when nobody in front of it is recognized."
+            footer: "A page from a household member's iPhone is shown only to that person. It waits, unseen, until the hub recognizes them, then opens or asks as chosen here. The hub always asks for the first page from a newly paired iPhone, and for a page from an iPhone that belongs to nobody when the person in front is not recognized."
         ),
         SettingDescriptor(
             hubName,
@@ -54,7 +54,7 @@ public enum BeamSettings {
             keepHistory,
             title: "Keep Recent Pages",
             pane: pane,
-            footer: "Recent pages are kept in memory only and are cleared when HomePad quits."
+            footer: "Each person sees only their own recent pages. They are kept in memory only and are cleared when HomePad quits. A guest's are cleared when the guest leaves."
         ),
         SettingDescriptor(
             allowLocalAddresses,

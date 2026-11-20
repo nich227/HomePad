@@ -1,6 +1,5 @@
 import HomePadBeamCore
 import SwiftUI
-import WebKit
 
 /// A companion's view of a browse-together session: the shared page, kept in step with everyone
 /// else. It browses without a persistent cookie jar.
@@ -15,13 +14,13 @@ public struct SharedPageView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if model.page.isLoading {
-                ProgressView(value: model.page.estimatedProgress)
+            if model.isLoading {
+                ProgressView(value: model.estimatedProgress)
                     .accessibilityLabel(Text("Loading page"))
             }
-            WebView(model.page)
+            BeamWebView(model: model)
         }
-        .navigationTitle(Text(model.page.title.isEmpty ? (model.page.url?.host() ?? "") : model.page.title))
+        .navigationTitle(Text(model.title.isEmpty ? (model.url?.host() ?? "") : model.title))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .bottomBar) {
@@ -38,12 +37,12 @@ public struct SharedPageView: View {
             }
         }
         .task(id: coordinator.currentPage) {
-            guard let page = coordinator.currentPage, page.url != model.page.url else { return }
+            guard let page = coordinator.currentPage, page.url != model.url else { return }
             model.load(page)
         }
-        .onChange(of: model.page.url) { _, url in
+        .onChange(of: model.url) { _, url in
             guard let url else { return }
-            coordinator.localDidNavigate(to: url, title: model.page.title.isEmpty ? nil : model.page.title)
+            coordinator.localDidNavigate(to: url, title: model.title.isEmpty ? nil : model.title)
         }
     }
 }

@@ -18,18 +18,21 @@ public enum BeamDeliveryState: Equatable, Sendable {
 
     public static let receiptTimeout: TimeInterval = 6
 
-    /// A later receipt for the same beam replaces "waiting for approval" with the final answer.
+    /// A later receipt for the same beam replaces an answer that says the page is still waiting
+    /// at the hub with what became of it.
     public func applying(_ receipt: BeamReceipt, to beamID: UUID) -> BeamDeliveryState {
         guard receipt.beamID == beamID else { return self }
         switch self {
-        case .sending, .delivered(.awaitingApproval), .failed(.noReceipt): return .delivered(receipt.outcome)
-        default: return self
+        case .sending, .delivered(.awaitingApproval), .delivered(.waitingForOwner), .failed(.noReceipt):
+            return .delivered(receipt.outcome)
+        default:
+            return self
         }
     }
 
     public var isSuccess: Bool {
         switch self {
-        case .delivered(.opened), .delivered(.awaitingApproval): true
+        case .delivered(.opened), .delivered(.awaitingApproval), .delivered(.waitingForOwner): true
         default: false
         }
     }

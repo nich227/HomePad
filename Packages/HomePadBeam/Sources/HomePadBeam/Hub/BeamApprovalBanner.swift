@@ -4,8 +4,10 @@ import HomePadBeamCore
 import HomePadCore
 import SwiftUI
 
-/// Asks whoever is at the hub whether to open the oldest waiting page. Shows who sent it and the
-/// site it points to, sized to be read from across the room when nobody is near.
+/// Asks the person in front of the hub whether to open the oldest page that is waiting for them.
+/// Shows who sent it and the site it points to, sized to be read from across the room when
+/// nobody is near. A page that belongs to someone else is never in `receiver.pending`, so it is
+/// not shown.
 public struct BeamApprovalBanner: View {
     private let receiver: BeamReceiver
     private let proximity: Proximity
@@ -63,7 +65,7 @@ public struct BeamApprovalBanner: View {
     }
 }
 
-/// Pages opened on the hub recently. Tapping one opens it again.
+/// Pages the person in front of the hub opened recently. Tapping one opens it again.
 public struct BeamRecentsView: View {
     private let receiver: BeamReceiver
 
@@ -78,7 +80,7 @@ public struct BeamRecentsView: View {
                 ContentUnavailableView(
                     "No Recent Pages",
                     systemImage: "clock",
-                    description: Text("Pages sent from a paired iPhone appear here.")
+                    description: Text("Pages you open on the hub appear here. Only you see them.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
