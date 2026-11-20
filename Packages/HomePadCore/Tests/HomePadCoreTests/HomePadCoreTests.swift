@@ -268,6 +268,390 @@ import Testing
     }
 }
 
+@MainActor
+@Suite struct HouseholdSessionLingerTests {
+    private let session: HouseholdSession
+    private let alice: HouseholdProfile
+    private let bob: HouseholdProfile
+    private let start = Date(timeIntervalSince1970: 1_000)
+
+    init() throws {
+        session = HouseholdSession(store: InMemoryProfileStore(), lingerDuration: 120)
+        alice = try session.addProfile(name: "Alice")
+        bob = try session.addProfile(name: "Bob")
+    }
+
+    private func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
+
+    /// Alice is recognized with a live face, then walks out of view at `start`.
+    private func aliceStepsAway() -> Int {
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        return generation
+    }
+
+    // MARK: A member the camera recognized
+
+    @Test func presenceLost_whenMemberWasRecognized_thenLingersWithPersonalContentLockedAtOnce() {
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(-10))
+        #expect(session.isPersonalContentUnlocked)
+        #expect(!session.isLingering)
+        let generation = session.audienceGeneration
+
+        session.presenceLost(at: start)
+        #expect(session.activeProfile == alice)
+        #expect(session.activation == .manual(alice.id))
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(!session.canConfirmWithDeviceBiometrics)
+        #expect(session.isLingering)
+        #expect(session.lingerDeadline == at(120))
+        #expect(!session.isSomeonePresent)
+        #expect(session.proximity == .far)
+        #expect(session.audienceGeneration == generation)
+    }
+
+    @Test func presenceLost_whenMemberWasConfirmedByDeviceBiometrics_thenLingersAndTheConfirmationIsGone() {
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near, at: at(-10))
+        #expect(session.confirmWithDeviceBiometrics(at: at(-5)))
+        let generation = session.audienceGeneration
+
+        session.presenceLost(at: start)
+        #expect(session.activation == .manual(alice.id))
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(!session.canConfirmWithDeviceBiometrics)
+        #expect(!session.confirmWithDeviceBiometrics(at: at(1)))
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.audienceGeneration == generation)
+    }
+
+    @Test func endLingerIfDue_whenDeadlinePasses_thenMemberSignsOut() {
+        let generation = aliceStepsAway()
+        #expect(!session.endLingerIfDue(at: at(119.9)))
+        #expect(session.activeProfile == alice)
+        #expect(session.audienceGeneration == generation)
+
+        #expect(session.endLingerIfDue(at: at(120)))
+        #expect(session.activation == .none)
+        #expect(session.isGuest)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+        #expect(!session.endLingerIfDue(at: at(500)))
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func faceRecognized_whenSameMemberReturnsInTime_thenRestoredWithNothingLost() {
+        let generation = aliceStepsAway()
+        session.faceRecognized(profileID: alice.id, proximity: .mid, at: at(60))
+        #expect(session.activation == .face(alice.id, at: at(60)))
+        #expect(session.isPersonalContentUnlocked)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+        #expect(!session.endLingerIfDue(at: at(500)))
+        #expect(session.activeProfile == alice)
+    }
+
+    @Test func faceMatchedWithoutLiveness_whenSameMemberReturnsInTime_thenRestoredAndCanConfirmAgain() {
+        let generation = aliceStepsAway()
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near, at: at(60))
+        #expect(session.activation == .manual(alice.id))
+        #expect(session.canConfirmWithDeviceBiometrics)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+        #expect(!session.endLingerIfDue(at: at(500)))
+    }
+
+    @Test func faceRecognized_whenSameMemberReturnsAfterTheDeadline_thenTheyHadSignedOut() {
+        let generation = aliceStepsAway()
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(121))
+        #expect(session.activation == .face(alice.id, at: at(121)))
+        #expect(session.audienceGeneration == generation + 2)
+    }
+
+    @Test func lock_whenLingering_thenSignsOutAtOnce() {
+        let generation = aliceStepsAway()
+        session.lock()
+        #expect(session.activation == .none)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+        #expect(!session.endLingerIfDue(at: at(500)))
+    }
+
+    @Test func switchManually_whenLingeringAndAnotherProfileIsPicked_thenSignsOutAtOnce() throws {
+        let generation = aliceStepsAway()
+        try session.switchManually(to: bob.id)
+        #expect(session.activation == .manual(bob.id))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+        #expect(!session.endLingerIfDue(at: at(500)))
+        #expect(session.activation == .manual(bob.id))
+    }
+
+    @Test func switchManually_whenLingeringMemberIsPickedByHand_thenTheySimplyStay() throws {
+        let generation = aliceStepsAway()
+        try session.switchManually(to: alice.id)
+        #expect(session.activation == .manual(alice.id))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+        #expect(!session.endLingerIfDue(at: at(500)))
+        #expect(session.activeProfile == alice)
+    }
+
+    @Test func faceRecognized_whenLingeringAndAnotherMemberAppears_thenSignsOutAtOnce() {
+        let generation = aliceStepsAway()
+        session.faceRecognized(profileID: bob.id, proximity: .near, at: at(5))
+        #expect(session.activation == .face(bob.id, at: at(5)))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func faceMatchedWithoutLiveness_whenLingeringAndAnotherMemberAppears_thenSignsOutAtOnce() {
+        let generation = aliceStepsAway()
+        session.faceMatchedWithoutLiveness(profileID: bob.id, proximity: .near, at: at(5))
+        #expect(session.activation == .manual(bob.id))
+        #expect(session.cameraMatchedProfileID == bob.id)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func unknownFacePresent_whenLingeringAndAJudgedFaceMatchesNobody_thenSignsOutAtOnce() {
+        let generation = aliceStepsAway()
+        session.unknownFacePresent(proximity: .near, at: at(5))
+        #expect(session.activation == .none)
+        #expect(session.isSomeonePresent)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func unknownFacePresent_whenRecognizedMemberIsReplaced_thenSignsOutAtOnce() {
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+        session.unknownFacePresent(proximity: .near, at: start)
+        #expect(session.activation == .none)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    // MARK: A face that cannot be judged
+
+    @Test func faceUnreadable_whenMemberTurnsAway_thenStartsToLingerInsteadOfSigningOut() {
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+
+        session.faceUnreadable(proximity: .mid, at: start)
+        #expect(session.activeProfile == alice)
+        #expect(session.activation == .manual(alice.id))
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(!session.canConfirmWithDeviceBiometrics)
+        #expect(session.isSomeonePresent)
+        #expect(session.proximity == .mid)
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.audienceGeneration == generation)
+    }
+
+    @Test func faceUnreadable_whenAlreadyLingering_thenTheDeadlineDoesNotMove() {
+        let generation = aliceStepsAway()
+        session.faceUnreadable(proximity: .near, at: at(30))
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.isSomeonePresent)
+        session.presenceLost(at: at(60))
+        session.presenceLost(at: at(90))
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.activeProfile == alice)
+        #expect(session.audienceGeneration == generation)
+
+        session.faceUnreadable(proximity: .near, at: at(120))
+        #expect(session.isGuest)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func faceUnreadable_whenCameraMatchedMemberTurnsAway_thenLingers() {
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near, at: at(-10))
+        session.faceUnreadable(proximity: .near, at: start)
+        #expect(session.activation == .manual(alice.id))
+        #expect(session.cameraMatchedProfileID == nil)
+        #expect(session.lingerDeadline == at(120))
+    }
+
+    // MARK: A guest
+
+    @Test func presenceLost_whenGuestWalksAway_thenLingersAndAnyFaceComingBackContinuesTheSession() {
+        session.unknownFacePresent(proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+
+        session.presenceLost(at: start)
+        #expect(session.isGuest)
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.audienceGeneration == generation)
+
+        session.unknownFacePresent(proximity: .near, at: at(30))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+
+        session.presenceLost(at: at(40))
+        #expect(session.lingerDeadline == at(160))
+        session.faceUnreadable(proximity: .near, at: at(50))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+        #expect(!session.endLingerIfDue(at: at(500)))
+    }
+
+    @Test func endLingerIfDue_whenGuestStaysAway_thenGuestSignsOut() {
+        session.faceUnreadable(proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        #expect(session.endLingerIfDue(at: at(120)))
+        #expect(session.isGuest)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func faceRecognized_whenGuestIsLingeringAndAMemberAppears_thenGuestSignsOut() {
+        session.unknownFacePresent(proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(5))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func presenceLost_whenTheCameraNeverSawAnyone_thenNothingStarts() {
+        let generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+    }
+
+    // MARK: A member picked by hand
+
+    @Test func presenceLost_whenHandPickedMemberWalksAway_thenLingersAndStaysPickedAfterSigningOut() throws {
+        try session.switchManually(to: bob.id)
+        session.unknownFacePresent(proximity: .near, at: at(-10))
+        #expect(session.activation == .manual(bob.id))
+        let generation = session.audienceGeneration
+
+        session.presenceLost(at: start)
+        #expect(session.activation == .manual(bob.id))
+        #expect(session.lingerDeadline == at(120))
+        #expect(session.audienceGeneration == generation)
+
+        #expect(session.endLingerIfDue(at: at(120)))
+        #expect(session.activation == .manual(bob.id))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func faceReturns_whenHandPickedMemberIsLingering_thenTheSessionContinues() throws {
+        try session.switchManually(to: bob.id)
+        session.faceUnreadable(proximity: .near, at: at(-10))
+        let generation = session.audienceGeneration
+
+        session.presenceLost(at: start)
+        session.unknownFacePresent(proximity: .near, at: at(10))
+        #expect(!session.isLingering)
+        session.presenceLost(at: at(20))
+        session.faceUnreadable(proximity: .near, at: at(30))
+        #expect(!session.isLingering)
+        session.presenceLost(at: at(40))
+        session.faceRecognized(profileID: bob.id, proximity: .near, at: at(50))
+        #expect(session.activation == .face(bob.id, at: at(50)))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+    }
+
+    @Test func presenceLost_whenHandPickedAndTheCameraNeverSawAnyone_thenNothingStarts() throws {
+        try session.switchManually(to: bob.id)
+        let generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation)
+    }
+
+    // MARK: Off
+
+    @Test func lingerOff_whenTheCameraLosesTheAudience_thenTheySignOutAtOnce() throws {
+        session.lingerDuration = 0
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(-10))
+        var generation = session.audienceGeneration
+        session.presenceLost(at: start)
+        #expect(session.activation == .none)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: at(10))
+        generation = session.audienceGeneration
+        session.faceUnreadable(proximity: .near, at: at(20))
+        #expect(session.activation == .none)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+
+        generation = session.audienceGeneration
+        session.presenceLost(at: at(30))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+        session.presenceLost(at: at(31))
+        #expect(session.audienceGeneration == generation + 1)
+
+        try session.switchManually(to: bob.id)
+        session.unknownFacePresent(proximity: .near, at: at(40))
+        generation = session.audienceGeneration
+        session.presenceLost(at: at(50))
+        #expect(session.activation == .manual(bob.id))
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    // MARK: The one signal
+
+    @Test func audienceGeneration_whenThePersonChanges_thenItChangesAndOtherwiseItDoesNot() throws {
+        var generation = session.audienceGeneration
+        session.faceRecognized(profileID: alice.id, proximity: .near, at: start)
+        #expect(session.audienceGeneration == generation + 1)
+
+        generation = session.audienceGeneration
+        session.faceRecognized(profileID: alice.id, proximity: .far, at: at(1))
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near, at: at(2))
+        session.confirmWithDeviceBiometrics(at: at(3))
+        session.setCompanionPresent(true, for: alice.id)
+        try session.switchManually(to: alice.id)
+        #expect(session.audienceGeneration == generation)
+
+        try session.switchManually(to: bob.id)
+        #expect(session.audienceGeneration == generation + 1)
+        try session.removeProfile(id: bob.id)
+        #expect(session.audienceGeneration == generation + 2)
+        session.lock()
+        #expect(session.audienceGeneration == generation + 3)
+        try session.removeProfile(id: alice.id)
+        #expect(session.audienceGeneration == generation + 3)
+    }
+
+    @Test func dropDeviceBiometricConfirmation_whenConfirmed_thenLocksAgainWithoutSigningOut() {
+        session.dropDeviceBiometricConfirmation()
+        #expect(session.activation == .none)
+
+        session.faceMatchedWithoutLiveness(profileID: alice.id, proximity: .near, at: start)
+        session.dropDeviceBiometricConfirmation()
+        #expect(session.canConfirmWithDeviceBiometrics)
+
+        session.confirmWithDeviceBiometrics(at: at(1))
+        let generation = session.audienceGeneration
+        session.dropDeviceBiometricConfirmation()
+        #expect(session.activation == .manual(alice.id))
+        #expect(!session.isConfirmedByDeviceBiometrics)
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(session.canConfirmWithDeviceBiometrics)
+        #expect(session.audienceGeneration == generation)
+    }
+
+    @Test func lingerDuration_whenNotGiven_thenOff() {
+        #expect(HouseholdSession(store: InMemoryProfileStore()).lingerDuration == 0)
+        #expect(session.lingerDuration == 120)
+    }
+}
+
 private struct FailingStore: ProfileStore {
     struct Failure: Error {}
     func load() throws -> [HouseholdProfile] { throw Failure() }

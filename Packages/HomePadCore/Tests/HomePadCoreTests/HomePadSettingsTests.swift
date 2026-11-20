@@ -101,7 +101,27 @@ import Testing
         #expect(GeneralSettings.resolvedRole(setting: "companion", isPad: true) == .companion)
         #expect(GeneralSettings.resolvedRole(setting: "automatic", isPad: true) == .hub)
         #expect(GeneralSettings.resolvedRole(setting: "anything else", isPad: false) == .companion)
-        #expect(GeneralSettings.descriptors.map(\.name) == ["general.setupMode", "general.deviceRole", "general.requireCompanion"])
+        #expect(GeneralSettings.descriptors.map(\.name) == [
+            "general.setupMode", "general.deviceRole", "general.requireCompanion", "general.staySignedInSeconds",
+        ])
         #expect(GeneralSettings.descriptors.allSatisfy { $0.pane == GeneralSettings.pane })
+    }
+
+    @Test func generalSettings_lingerDuration_whenValueIsNotAChoice_thenDefault() throws {
+        #expect(GeneralSettings.lingerDuration(setting: 0) == 0)
+        #expect(GeneralSettings.lingerDuration(setting: 30) == 30)
+        #expect(GeneralSettings.lingerDuration(setting: 600) == 600)
+        #expect(GeneralSettings.lingerDuration(setting: 45) == 120)
+        #expect(GeneralSettings.lingerDuration(setting: -1) == 120)
+        #expect(GeneralSettings.lingerDuration(setting: GeneralSettings.staySignedInSeconds.defaultValue) == 120)
+
+        let descriptor = try #require(GeneralSettings.descriptors.first { $0.name == GeneralSettings.staySignedInSeconds.name })
+        #expect(descriptor.defaultValue == .integer(120))
+        guard case .choice(let options) = descriptor.control else {
+            Issue.record("expected a choice")
+            return
+        }
+        #expect(options.map(\.value) == GeneralSettings.staySignedInOptions.map(String.init))
+        #expect(options.map(\.title) == ["Off", "30 seconds", "2 minutes", "5 minutes", "10 minutes"])
     }
 }

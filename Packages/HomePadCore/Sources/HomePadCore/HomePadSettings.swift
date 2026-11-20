@@ -162,6 +162,10 @@ public enum GeneralSettings {
     /// "automatic" follows the device: iPad is the hub, iPhone is a companion.
     public static let deviceRole = SettingKey<String>("general.deviceRole", default: "automatic")
     public static let requireCompanionForPersonalContent = SettingKey<Bool>("general.requireCompanion", default: false)
+    /// Seconds the audience stays signed in after the camera loses sight of them. Zero is off.
+    public static let staySignedInSeconds = SettingKey<Int>("general.staySignedInSeconds", default: 120)
+
+    public static let staySignedInOptions = [0, 30, 120, 300, 600]
 
     public static let descriptors: [SettingDescriptor] = [
         SettingDescriptor(
@@ -186,7 +190,26 @@ public enum GeneralSettings {
             pane: pane,
             footer: "When on, a recognized face shows personal content only while that person's paired iPhone is connected."
         ),
+        SettingDescriptor(
+            staySignedInSeconds,
+            title: "Stay Signed In After Stepping Away",
+            pane: pane,
+            options: [
+                .init(title: "Off", value: "0"),
+                .init(title: "30 seconds", value: "30"),
+                .init(title: "2 minutes", value: "120"),
+                .init(title: "5 minutes", value: "300"),
+                .init(title: "10 minutes", value: "600"),
+            ],
+            footer: "How long the hub keeps what you have open, such as pages sent from your iPhone, after it loses sight of you. Come back within this time and everything is where you left it. After it, the hub signs you out and closes them. Personal content such as messages still locks as soon as the hub loses sight of you, and the wait ends at once if the hub sees someone else or is locked. Off signs you out as soon as the hub loses sight of you."
+        ),
     ]
+
+    /// The value for `HouseholdSession.lingerDuration`. A stored value that is not one of the
+    /// choices falls back to the default.
+    public static func lingerDuration(setting: Int) -> TimeInterval {
+        TimeInterval(staySignedInOptions.contains(setting) ? setting : staySignedInSeconds.defaultValue)
+    }
 
     public static func resolvedRole(setting: String, isPad: Bool) -> DeviceRole {
         switch setting {
