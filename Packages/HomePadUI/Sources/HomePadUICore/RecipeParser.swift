@@ -3,15 +3,36 @@ import Foundation
 public struct RecipeStep: Identifiable, Equatable, Sendable {
     /// Position in the whole recipe, starting at one.
     public let id: Int
+    /// A few words that name the step, when the page or the enhancer gives them.
     public let title: String?
     public let text: String
     /// A duration mentioned in the step, offered as a one-tap timer.
     public let timer: TimeInterval?
+    /// The ingredient lines this step uses, so a cook does not scroll back to the list. Empty
+    /// when nothing says which they are.
+    public let ingredients: [String]
+    /// For a step an enhancer wrote: the `id` of the step of the original recipe it came from,
+    /// so the reader can keep its place when it switches between the two. Nil when unknown.
+    public let sourceStepID: Int?
+
+    public init(id: Int, title: String? = nil, text: String, timer: TimeInterval? = nil, ingredients: [String] = [], sourceStepID: Int? = nil) {
+        self.id = id
+        self.title = title
+        self.text = text
+        self.timer = timer
+        self.ingredients = ingredients
+        self.sourceStepID = sourceStepID
+    }
 }
 
 public struct RecipeSection: Equatable, Sendable {
     public let name: String?
     public let steps: [RecipeStep]
+
+    public init(name: String? = nil, steps: [RecipeStep]) {
+        self.name = name
+        self.steps = steps
+    }
 }
 
 public struct Recipe: Equatable, Sendable {
@@ -25,6 +46,35 @@ public struct Recipe: Equatable, Sendable {
     public let totalTime: TimeInterval?
     public let ingredients: [String]
     public let sections: [RecipeSection]
+    /// True for a recipe an enhancer rewrote for the reader. The page's own recipe is kept
+    /// beside it.
+    public let isTidied: Bool
+
+    public init(
+        name: String,
+        summary: String? = nil,
+        author: String? = nil,
+        imageURL: URL? = nil,
+        yield: String? = nil,
+        prepTime: TimeInterval? = nil,
+        cookTime: TimeInterval? = nil,
+        totalTime: TimeInterval? = nil,
+        ingredients: [String] = [],
+        sections: [RecipeSection],
+        isTidied: Bool = false
+    ) {
+        self.name = name
+        self.summary = summary
+        self.author = author
+        self.imageURL = imageURL
+        self.yield = yield
+        self.prepTime = prepTime
+        self.cookTime = cookTime
+        self.totalTime = totalTime
+        self.ingredients = ingredients
+        self.sections = sections
+        self.isTidied = isTidied
+    }
 
     public var steps: [RecipeStep] { sections.flatMap(\.steps) }
 
@@ -320,6 +370,21 @@ public enum HTMLText {
             .joined(separator: "\n")
     }
 
+    /// The words a person would read on a page, for handing to an enhancer: scripts, styles,
+    /// and other blocks nobody reads are dropped, tags are removed, and the result is cut off
+    /// at `limit` characters.
+    public static func readable(_ html: String, limit: Int) -> String {
+        var text = html.replacing(#/<!--.*?-->/#.dotMatchesNewlines(), with: " ")
+        text = text.replacing(#/<\s*(script|style|noscript|svg|template|head)\b.*?<\s*/\s*\1\s*>/#.ignoresCase().dotMatchesNewlines(), with: " ")
+        return String(plain(text).prefix(max(0, limit)))
+    }
+
+    /// The page's title, as plain text, or an empty string.
+    public static func title(in html: String) -> String {
+        guard let match = html.firstMatch(of: #/<\s*title\b[^>]*>(.*?)<\s*/\s*title\s*>/#.ignoresCase().dotMatchesNewlines()) else { return "" }
+        return String(plain(String(match.1)).replacingOccurrences(of: "\n", with: " ").prefix(200))
+    }
+
     /// Removes a leading "1." or "Step 2:" because the reader numbers steps itself.
     static func strippingStepNumber(_ text: String) -> String {
         text.replacing(#/^\s*(?:step\s*)?\d+\s*[.):]\s+/#.ignoresCase(), with: "")
@@ -359,4 +424,21 @@ public enum HTMLText {
         "eacute": "\u{00E9}", "egrave": "\u{00E8}", "agrave": "\u{00E0}", "ccedil": "\u{00E7}",
         "ntilde": "\u{00F1}", "uuml": "\u{00FC}", "ouml": "\u{00F6}", "auml": "\u{00E4}",
     ]
+}
+
+/// Finds the amounts in a recipe step ("2 cups", "350°F", "1/2 tsp", "10 minutes") so the
+/// reader can make them stand out.
+public enum RecipeQuantities {
+    private static let pattern: NSRegularExpression? = {
+        let number = #"(?:\d+(?:[.,/]\d+)?(?:\s\d+/\d+)?|[\u00BC-\u00BE\u2150-\u215E])"#
+        let range = "(?:\\s?(?:-|\\u2013|to)\\s?" + number + ")?"
+        let unit = #"(?:\s?(?:\u00B0\s?[CF]?|degrees|cups?|tablespoons?|tbsp|teaspoons?|tsp|grams?|kg|g|ml|l|liters?|litres?|ounces?|oz|pounds?|lbs?|inch(?:es)?|cm|minutes?|mins?|hours?|hrs?|seconds?|secs?)(?![A-Za-z]))?"#
+        return try? NSRegularExpression(pattern: #"(?<![\w.])"# + number + range + unit, options: [.caseInsensitive])
+    }()
+
+    /// The ranges of `text` that are amounts, in order.
+    public static func ranges(in text: String) -> [Range<String.Index>] {
+        guard let pattern else { return [] }
+        return pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { Range($0.range, in: text) }
+    }
 }

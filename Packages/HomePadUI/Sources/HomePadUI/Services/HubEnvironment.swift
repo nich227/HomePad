@@ -88,9 +88,11 @@ public final class HubEnvironment {
             humidity: 0.76,
             windKilometersPerHour: 11,
             sunset: Date().addingTimeInterval(4 * 3600),
+            precipitationChance: 0.3,
             asOf: Date()
         )))
-        weather.configure(location: nil)
+        weather.configure(source: .current, custom: nil)
+        weather.begin()
         return HubEnvironment(
             layoutStore: InMemoryLayoutStore(),
             timers: timers,
@@ -100,7 +102,7 @@ public final class HubEnvironment {
             camera: PreviewCameraService(),
             weather: weather,
             photos: FacePhotoLibrary(directory: nil),
-            recipes: RecipeLibrary(loader: FixedRecipePageLoader(html: recipePage))
+            recipes: RecipeLibrary(loader: FixedRecipePageLoader(html: recipePage), enhancer: SampleRecipeEnhancer())
         )
     }
 }
@@ -184,17 +186,29 @@ final class ScreenController {
         UIApplication.shared.isIdleTimerDisabled = keepAwake
     }
 
+    /// The screen's brightness now, 0...1, or nil when no screen is in front.
+    var brightness: Double? {
+        screen.map { Double($0.brightness) }
+    }
+
+    /// Night Mode dims the screen once, on entering, and remembers what it was. Nil puts that
+    /// back. Dimming only on entering leaves the control center's slider free to raise it.
     func setNightBrightness(_ brightness: Double?) {
         guard let screen else { return }
         if let brightness {
-            if brightnessBefore == nil {
-                brightnessBefore = screen.brightness
-            }
+            guard brightnessBefore == nil else { return }
+            brightnessBefore = screen.brightness
             screen.brightness = min(screen.brightness, CGFloat(brightness))
         } else if let before = brightnessBefore {
             screen.brightness = before
             brightnessBefore = nil
         }
+    }
+
+    /// The brightness slider in the control center. The system has no other brightness an app
+    /// may set, so this is the screen's own.
+    func setBrightness(_ brightness: Double) {
+        screen?.brightness = CGFloat(brightness)
     }
 
     func restore() {

@@ -8,7 +8,7 @@ The package has two targets:
 
 | Target | What it holds |
 |---|---|
-| `HomePadUICore` | Pure logic, unit-tested on the iOS simulator at 100% line coverage: the hub's state machine and gesture zones, the grids, the design tokens, Night Mode, clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, the recipe parser, Flow face math, the rules for sizes and folds, and `UISettings`. |
+| `HomePadUICore` | Pure logic, unit-tested on the iOS simulator at 100% line coverage: the hub's state machine and gesture zones, the grids, the design tokens, Night Mode, clock math, time text, the timer state machine, alarm scheduling, layouts and their store, the app and widget catalog with visibility rules, the recipe parser and the recipe reader's session, Flow face math, the rules for sizes and folds, and `UISettings`. |
 | `HomePadUI` | SwiftUI views and the services behind them (HomeKit, Music, camera, Core Location, WeatherKit, Photos, Vision). |
 
 ## How the app target uses it
@@ -674,7 +674,7 @@ Every face, widget, and the Weather app say plainly why there is no weather
 | Home | A bar of rooms across the top; the room's thermostat as a large tile; cameras, scenes, and accessories as glass tiles over the wallpaper. Tap to switch, hold a light for the dimmer, tap the thermostat for the dial, tap a camera for a live view. A guest can lock a door but not unlock one. Scenes: see below. |
 | Music | A blurred backdrop of the artwork, the cover, title and artist, a scrubber to drag (`MusicService.seek`), transport, and the system's AirPlay route picker. Through `MPMusicPlayerController.systemMusicPlayer`. |
 | Mirror | Front camera, full view or zoomed. |
-| Recipes | Paste or beam a link. `RecipeParser` reads schema.org Recipe JSON-LD. The reader shows a cover, an ingredient checklist, and one step at a time: a numbered badge, the instruction in large type with its amounts picked out (`RecipeQuantities`), a timer button for any duration the step mentions, and the running timer as a pill floating in the corner. |
+| Recipes | Paste or beam a link. `RecipeParser` reads schema.org Recipe JSON-LD. The reader shows a cover, an ingredient checklist, and one step at a time. See "The recipe reader". |
 | Weather | The Weather face with every detail. See "Weather and location". |
 | Photos | The system photo picker. Chosen photos are copied into the app's storage. |
 | Calendar, Intercom | Supplied through their slots. |
@@ -696,8 +696,87 @@ every view previews without hardware.
 
 
 Services sit behind protocols (`HomeService`, `MusicService`, `CameraPreviewService`,
-`WeatherProviding`, `LocationProviding`, `RecipePageLoading`) and `HubEnvironment.preview()`
+`WeatherProviding`, `LocationProviding`, `RecipePageLoading`, `RecipeEnhancing`) and `HubEnvironment.preview()`
 supplies stand-ins, so every view previews without hardware.
+
+## The recipe reader
+
+The cooking screen follows the specification's layout for messy hands: a large numbered badge
+with "Step 2 of 6", the instruction at 24 points on the reference square with its amounts
+picked out in the accent color (`RecipeQuantities`), a timer button for any duration the step
+mentions, and the running timer as a glass pill floating in the top corner.
+
+| Distance | Shows |
+|---|---|
+| Far | The badge, the step's short title, and the instruction at 32 points |
+| Mid | The section name and the ingredients the step uses, as glass chips |
+| Near | Stop, previous and next, the timer button, and the "Tidied on this iPad" note |
+
+### Tidying a recipe with a model
+
+The reader has a hook for something that rewrites a recipe so it reads well in a kitchen. The
+package does not depend on any model: the app supplies an enhancer, and without one recipes
+show as their pages give them.
+
+```swift
+// HomePadUICore
+public protocol RecipeEnhancing: Sendable {
+    @MainActor func enhance(recipe: Recipe?, pageText: String, title: String) async -> Recipe?
+}
+
+public struct RecipeStep {
+    public init(id: Int, title: String? = nil, text: String, timer: TimeInterval? = nil,
+                ingredients: [String] = [], sourceStepID: Int? = nil)
+}
+public struct RecipeSection {
+    public init(name: String? = nil, steps: [RecipeStep])
+}
+public struct Recipe {
+    public init(name: String, summary: String? = nil, author: String? = nil, imageURL: URL? = nil,
+                yield: String? = nil, prepTime: TimeInterval? = nil, cookTime: TimeInterval? = nil,
+                totalTime: TimeInterval? = nil, ingredients: [String] = [],
+                sections: [RecipeSection], isTidied: Bool = false)
+}
+
+// HomePadUI
+public init(loader: any RecipePageLoading = URLSessionRecipePageLoader(),
+            enhancer: (any RecipeEnhancing)? = nil)   // RecipeLibrary
+```
+
+- `recipe` is what the page's structured data gave, or nil when it had none. `pageText` is the
+  page's readable text (`HTMLText.readable`: scripts, styles, and markup removed), cut off at
+  `RecipeEnhancement.maximumPageTextLength` (12,000 characters). `title` is the page's title.
+- The enhancer returns a `Recipe` or nil. `RecipeEnhancement.accepted` (Core) is what the reader
+  takes from it: a name and at least one step with text. Steps are numbered again from one,
+  `isTidied` is set, a step with no timer gets one from a duration in its text, each step keeps
+  at most eight ingredient lines, and anything left out (picture, author, yield, times, the
+  ingredient list) is filled in from the page's recipe.
+- `RecipeStep.sourceStepID` is optional: the `id` of the step of the page's recipe that a
+  rewritten step came from. With it the reader keeps the cook's exact place when it swaps;
+  without it the reader goes to the same share of the way through.
+
+What the reader does (`RecipeSession` in Core, `RecipeLibrary` in the view layer):
+
+1. The page's own recipe shows at once. The reader never waits for the enhancer.
+2. When the enhancer answers, the tidied recipe takes its place with a slow cross-fade. The
+   step in front and the checked ingredients are carried over (`RecipePlace`): checks keep
+   their positions when the two lists are the same length and otherwise follow the same words.
+3. When the page has no structured recipe, the reader shows "Getting this recipe ready" while
+   the enhancer reads the page's text. A nil answer, or no enhancer, gives the usual "No recipe
+   was found on that page."
+4. A tidied step shows its short title above the instruction and the ingredients it uses as
+   chips. A quiet line says "Tidied on this iPad" with a button that switches to the page's own
+   words and back, keeping the place. It is on the cooking screen and the ingredient list.
+5. Opening another recipe, closing the recipe, or leaving the Recipes app cancels a request
+   that is still under way. A recipe that was already on screen stays as the page gave it. An
+   answer that arrives late for a visit that has ended is ignored.
+
+The page's text is held only by the request to the enhancer and is gone when the request ends.
+Nothing about a recipe is stored.
+
+`SampleRecipeEnhancer` is a stand-in with no model, for previews and UI tests. It splits each
+step into one action per step, names it with its first words, and lists the ingredients the
+step mentions. `HubEnvironment.preview()` and `HOMEPAD_UITEST_SAMPLE` use it.
 
 ## Night Mode
 
@@ -801,7 +880,7 @@ alone read them, and none is a preference.
 | Variable | Effect |
 |---|---|
 | `HOMEPAD_UITEST_EPHEMERAL=1` | Layouts, timers, alarms, and photos stay in memory. |
-| `HOMEPAD_UITEST_SAMPLE=1` | A sample household, home, music, weather, and recipe page stand in for the real services. Implies ephemeral. On the iPhone, a sample hub summary. |
+| `HOMEPAD_UITEST_SAMPLE=1` | A sample household, home, music, weather, recipe page, and recipe enhancer stand in for the real services. Implies ephemeral. On the iPhone, a sample hub summary. |
 | `HOMEPAD_UITEST_AUDIENCE=guest\|manual\|recognized` | Who is in front of the hub: nobody known, the first profile picked by hand, or the first profile recognized by face. |
 | `HOMEPAD_UITEST_PROXIMITY=far\|mid\|near` | How close they are. |
 | `HOMEPAD_UITEST_CANVAS=square\|fill` | The canvas for this launch, whatever Settings says. |
@@ -829,12 +908,13 @@ Screenshot names (with `pt-` in front for the upright walk):
 | `b21` to `b26` | | Home Modular: a light switched off, the dimmer, the dimmer set low, the thermostat dial, the dial dragged with Cool chosen, a camera full screen |
 | `b30`, `b31`, `b4-app-*`, `b45` to `b47` | | Home Screen, apps with content, an alarm added, the Home app on one room, the dial from the Home app |
 | `b50` to `b54` | | Timer presets, the ring, the list, the pill on a face, the pill expanded |
-| `b60` to `b64` | | Recipe entry, cover, ingredients, two steps with the timer pill |
+| `b60` to `b66` | | Recipe entry, the cover as the page gave it and then tidied, ingredients, a tidied step, a step with its ingredient chips and the timer pill, the page's own words, and tidied again |
 | `b70`, `b71` | | Control center, and with Do Not Disturb on |
 | `b80`, `b81` | | The assistant from the status area and from the control center |
 | `c101` to `c112` | Recognized member, mid | The twelve faces with labels and no controls |
 | `c20` to `c23` | Recognized member, far, sample data | Modular, Weather, Home Modular, Calendar across the room |
-| `n101` to `n112`, `n20` to `n72` | Night hook | Every face, the face picker, Home Screen, five apps, the dial, the assistant, the control center, then day again after the switch |
+| `c30`, `c31` | Mid, then far | A tidied recipe step on approach and from across the room |
+| `n101` to `n112`, `n20` to `n72` | Night hook | Every face, the face picker, Home Screen, five apps, the dial, a tidied recipe step, the assistant, the control center, then day again after the switch |
 | `e10` to `e13`, `e10-control-center`, `e11-control-center-*` | Guest, near | A face, Home Modular with scenes locked, Home Screen, the Home app, the control center |
 | `e20` | Profile picked by hand | Home Screen with personal items greyed out |
 | `e40`, `e42` | Touch ID hook | Home Screen with the Touch ID affordance, then iPhone Apps opened by it |

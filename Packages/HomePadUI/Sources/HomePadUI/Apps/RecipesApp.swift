@@ -46,6 +46,7 @@ struct RecipesApp: View {
             }
         }
         .animation(motion.gentle, value: library.isShowingTidied)
+        .onDisappear { library.leaveReader() }
         .task(id: navigator.pendingRecipeURL) {
             if let url = navigator.takePendingRecipeURL() {
                 stage = .cover
@@ -339,6 +340,8 @@ struct RecipesApp: View {
                             .opacity(density.showsLabels ? 1 : 0)
                     }
                     .lineLimit(1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("Step \(index + 1) of \(steps.count)"))
                     .accessibilityIdentifier("recipes.stepBadge")
                     Spacer()
                     timerPill
