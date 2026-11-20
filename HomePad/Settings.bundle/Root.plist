@@ -63,6 +63,38 @@
 			<string>PSToggleSwitchSpecifier</string>
 		</dict>
 		<dict>
+			<key>FooterText</key>
+			<string>How long the hub keeps what you have open, such as pages sent from your iPhone, after it loses sight of you. Come back within this time and everything is where you left it. After it, the hub signs you out and closes them. Personal content such as messages still locks as soon as the hub loses sight of you, and the wait ends at once if the hub sees someone else or is locked. Off signs you out as soon as the hub loses sight of you.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<integer>120</integer>
+			<key>Key</key>
+			<string>general.staySignedInSeconds</string>
+			<key>Title</key>
+			<string>Stay Signed In After Stepping Away</string>
+			<key>Titles</key>
+			<array>
+				<string>Off</string>
+				<string>30 seconds</string>
+				<string>2 minutes</string>
+				<string>5 minutes</string>
+				<string>10 minutes</string>
+			</array>
+			<key>Type</key>
+			<string>PSMultiValueSpecifier</string>
+			<key>Values</key>
+			<array>
+				<integer>0</integer>
+				<integer>30</integer>
+				<integer>120</integer>
+				<integer>300</integer>
+				<integer>600</integer>
+			</array>
+		</dict>
+		<dict>
 			<key>Type</key>
 			<string>PSGroupSpecifier</string>
 		</dict>

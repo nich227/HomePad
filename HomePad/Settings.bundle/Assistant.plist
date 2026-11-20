@@ -98,6 +98,22 @@
 				<integer>120</integer>
 			</array>
 		</dict>
+		<dict>
+			<key>FooterText</key>
+			<string>When on, a recipe sent to this hub is laid out as short steps by the language model on this device. Nothing leaves this device, every amount and ingredient is checked against the page, and the original recipe stays one tap away.</string>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+		</dict>
+		<dict>
+			<key>DefaultValue</key>
+			<true/>
+			<key>Key</key>
+			<string>assistant.formatRecipes</string>
+			<key>Title</key>
+			<string>Tidy Up Recipes</string>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+		</dict>
 	</array>
 	<key>StringsTable</key>
 	<string>Assistant</string>
