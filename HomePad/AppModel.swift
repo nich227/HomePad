@@ -67,6 +67,8 @@ final class AppModel {
     @ObservationIgnored private var configuredRole: DeviceRole?
     @ObservationIgnored private var isSceneActive = false
     @ObservationIgnored private var isRecognitionStarted = false
+    /// Ends the grace period of someone who stepped away, once it runs out.
+    @ObservationIgnored private var lingerClock: Task<Void, Never>?
 
     init() {
         let settings = HomePadSettings()
@@ -79,7 +81,8 @@ final class AppModel {
             ?? InMemoryProfileStore()
         session = HouseholdSession(
             store: store,
-            requiresCompanionForPersonalContent: settings[GeneralSettings.requireCompanionForPersonalContent]
+            requiresCompanionForPersonalContent: settings[GeneralSettings.requireCompanionForPersonalContent],
+            lingerDuration: GeneralSettings.lingerDuration(setting: settings[GeneralSettings.staySignedInSeconds])
         )
         ExtensionSettingsMirror.copy()
 
@@ -120,6 +123,7 @@ final class AppModel {
             gate.refresh()
             settings.refresh()
             session.requiresCompanionForPersonalContent = settings[GeneralSettings.requireCompanionForPersonalContent]
+            session.lingerDuration = GeneralSettings.lingerDuration(setting: settings[GeneralSettings.staySignedInSeconds])
             ExtensionSettingsMirror.copy()
         }
         applyScenePhase(background: scenePhase == .background)
@@ -226,6 +230,12 @@ final class AppModel {
                 assistant: assistant, assistantBridge: bridge
             ))
             configuredRole = .hub
+            lingerClock = Task { [session] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    session.endLingerIfDue()
+                }
+            }
         } catch {
             phase = .failed(String(localized: "The pairing store could not be opened."))
         }
@@ -249,6 +259,8 @@ final class AppModel {
         case .starting, .failed:
             break
         }
+        lingerClock?.cancel()
+        lingerClock = nil
         phase = .starting
         configuredRole = nil
         isRecognitionStarted = false

@@ -141,28 +141,13 @@ struct HubSceneView: View {
     }
 }
 
-/// The page being shown, or the recent pages when nothing is open.
+/// The browser of the person in front of the hub: their pages, the switcher, and their recents.
 private struct HubBeamView: View {
     let model: AppModel
     let hub: HubServices
 
     var body: some View {
-        if let beam = hub.receiver.current {
-            BeamBrowserView(
-                receiver: hub.receiver,
-                session: model.session,
-                beam: beam,
-                onNavigate: { [sharePlay = hub.sharePlay] url, title in
-                    sharePlay.localDidNavigate(to: url, title: title)
-                },
-                accessory: {
-                    SharePlayButton(coordinator: hub.sharePlay, url: beam.url.url, title: beam.payload.title)
-                }
-            )
-            .id(beam.id)
-        } else {
-            BeamRecentsView(receiver: hub.receiver)
-        }
+        BeamBrowserView(receiver: hub.receiver, session: model.session, sharePlay: hub.sharePlay)
     }
 }
 
