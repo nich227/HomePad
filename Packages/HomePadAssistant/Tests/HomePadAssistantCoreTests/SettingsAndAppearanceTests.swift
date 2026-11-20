@@ -8,14 +8,14 @@ import Testing
         let names = AssistantSettings.descriptors.map(\.name)
         #expect(names == [
             "assistant.enabled", "assistant.listenOnOpen", "assistant.speakAnswers",
-            "assistant.usePersonalContext", "assistant.autoDismissSeconds",
+            "assistant.usePersonalContext", "assistant.autoDismissSeconds", "assistant.formatRecipes",
         ])
         #expect(Set(names).count == names.count)
         #expect(AssistantSettings.descriptors.allSatisfy { $0.pane == "Assistant" })
     }
 
     @Test func descriptors_whenAutoDismissChoice_thenDefaultIsAmongNumericOptions() throws {
-        let descriptor = try #require(AssistantSettings.descriptors.last)
+        let descriptor = try #require(AssistantSettings.descriptors.first { $0.name == AssistantSettings.autoDismissSeconds.name })
         guard case .choice(let options) = descriptor.control else {
             Issue.record("not a choice")
             return
@@ -32,6 +32,17 @@ import Testing
         }
     }
 
+    @Test func descriptors_whenTidyUpRecipes_thenOnByDefaultAndSaysItStaysOnThisDeviceWithTheOriginalATapAway() throws {
+        let descriptor = try #require(AssistantSettings.descriptors.first { $0.name == "assistant.formatRecipes" })
+        #expect(descriptor.title == "Tidy Up Recipes")
+        #expect(descriptor.control == .toggle)
+        #expect(descriptor.defaultValue == .bool(true))
+        let footer = try #require(descriptor.footer)
+        #expect(footer.contains("on this device"))
+        #expect(footer.contains("original recipe stays one tap away"))
+        #expect(AssistantSettings.formatRecipes.defaultValue)
+    }
+
     @Test func preferences_whenDefaults_thenMatchTheSettingKeys() {
         let preferences = AssistantPreferences()
         #expect(preferences.isEnabled)
@@ -39,6 +50,7 @@ import Testing
         #expect(preferences.listensOnOpen)
         #expect(preferences.usesPersonalContext)
         #expect(preferences.autoDismissAfter == 30)
+        #expect(preferences.formatsRecipes)
     }
 
     @Test func preferences_whenAutoDismissIsZero_thenNeverCloses() {
@@ -59,8 +71,10 @@ import Testing
         defaults.set(false, forKey: AssistantSettings.listenOnOpen.name)
         defaults.set(false, forKey: AssistantSettings.usePersonalContext.name)
         defaults.set(120, forKey: AssistantSettings.autoDismissSeconds.name)
+        defaults.set(false, forKey: AssistantSettings.formatRecipes.name)
         let changed = AssistantPreferences(settings: settings)
-        #expect(changed == AssistantPreferences(isEnabled: false, speaksAnswers: false, listensOnOpen: false, usesPersonalContext: false, autoDismissSeconds: 120))
+        #expect(changed == AssistantPreferences(isEnabled: false, speaksAnswers: false, listensOnOpen: false, usesPersonalContext: false, autoDismissSeconds: 120, formatsRecipes: false))
+        #expect(!changed.formatsRecipes)
         #expect(changed.autoDismissAfter == 120)
     }
 }

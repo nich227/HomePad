@@ -12,6 +12,7 @@ public enum AssistantSettings {
     public static let usePersonalContext = SettingKey<Bool>("assistant.usePersonalContext", default: true)
     /// Seconds. Zero keeps the Assistant open until someone closes it.
     public static let autoDismissSeconds = SettingKey<Int>("assistant.autoDismissSeconds", default: 30)
+    public static let formatRecipes = SettingKey<Bool>("assistant.formatRecipes", default: true)
 
     public static let descriptors: [SettingDescriptor] = [
         SettingDescriptor(
@@ -46,6 +47,12 @@ public enum AssistantSettings {
             ],
             footer: "How long the Assistant stays on screen after it answers and nobody touches it."
         ),
+        SettingDescriptor(
+            formatRecipes,
+            title: "Tidy Up Recipes",
+            pane: pane,
+            footer: "When on, a recipe sent to this hub is laid out as short steps by the language model on this device. Nothing leaves this device, every amount and ingredient is checked against the page, and the original recipe stays one tap away."
+        ),
     ]
 }
 
@@ -57,19 +64,22 @@ public struct AssistantPreferences: Equatable, Sendable {
     public var usesPersonalContext: Bool
     /// Nil keeps the Assistant open until someone closes it.
     public var autoDismissAfter: TimeInterval?
+    public var formatsRecipes: Bool
 
     public init(
         isEnabled: Bool = AssistantSettings.enabled.defaultValue,
         speaksAnswers: Bool = AssistantSettings.speakAnswers.defaultValue,
         listensOnOpen: Bool = AssistantSettings.listenOnOpen.defaultValue,
         usesPersonalContext: Bool = AssistantSettings.usePersonalContext.defaultValue,
-        autoDismissSeconds: Int = AssistantSettings.autoDismissSeconds.defaultValue
+        autoDismissSeconds: Int = AssistantSettings.autoDismissSeconds.defaultValue,
+        formatsRecipes: Bool = AssistantSettings.formatRecipes.defaultValue
     ) {
         self.isEnabled = isEnabled
         self.speaksAnswers = speaksAnswers
         self.listensOnOpen = listensOnOpen
         self.usesPersonalContext = usesPersonalContext
         autoDismissAfter = autoDismissSeconds > 0 ? TimeInterval(autoDismissSeconds) : nil
+        self.formatsRecipes = formatsRecipes
     }
 
     @MainActor
@@ -79,7 +89,8 @@ public struct AssistantPreferences: Equatable, Sendable {
             speaksAnswers: settings[AssistantSettings.speakAnswers],
             listensOnOpen: settings[AssistantSettings.listenOnOpen],
             usesPersonalContext: settings[AssistantSettings.usePersonalContext],
-            autoDismissSeconds: settings[AssistantSettings.autoDismissSeconds]
+            autoDismissSeconds: settings[AssistantSettings.autoDismissSeconds],
+            formatsRecipes: settings[AssistantSettings.formatRecipes]
         )
     }
 }
