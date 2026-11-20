@@ -50,6 +50,7 @@ iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this dir
 | `Packages/HomePadMessaging` | Projection templates and protocol (Calendar, Reminders, Now Playing), App Intents, household notes |
 | `Packages/HomePadAssistant` | Apple Intelligence gate, the in-app Assistant (model, speech, overlay), hub actions as App Intents |
 | `HomePad/HubAssistantBridge.swift` | Implements the Assistant's actions and context over the hub's services |
+| `HomePad/HubRecipeEnhancer.swift` | Maps the Recipes reader's enhancer onto the Assistant's recipe formatter |
 | `Packages/HomePadKiosk` | Kiosk state machine, Single App Mode, passcode prompt |
 | `Packages/HomePadAnimations` | Lottie wrapper, generated animations, `Tools/generate_animations.py` |
 | `Packages/HomePadSettingsCatalog` | All descriptors, Settings bundle writer, the test that writes `Settings.bundle` |

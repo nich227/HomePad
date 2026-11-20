@@ -196,6 +196,10 @@ final class AppModel {
 
             // The Mirror shares the recognition camera: an iPad runs one front camera session.
             let live = HubEnvironment.live()
+            // The sample environment brings its own stand-in for the recipe model.
+            let recipes = HubTestHooks.current.usesSampleData
+                ? live.recipes
+                : RecipeLibrary(enhancer: HubRecipeEnhancer(formatter: RecipeFormatters.make(settings: settings)))
             let environment = HubEnvironment(
                 layoutStore: live.layoutStore,
                 timers: live.timers,
@@ -205,7 +209,7 @@ final class AppModel {
                 camera: SharedMirrorCamera(faces: faces),
                 weather: live.weather,
                 photos: live.photos,
-                recipes: live.recipes
+                recipes: recipes
             )
 
             // The Assistant and Siri's hub intents act through one bridge, under one set of rules.
