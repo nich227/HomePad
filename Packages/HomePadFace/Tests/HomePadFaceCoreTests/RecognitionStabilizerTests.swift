@@ -130,6 +130,69 @@ import Testing
         #expect(stabilizer.decision == .unknownPerson)
     }
 
+    @Test func hasJudgedStranger_whenFaceCannotBeJudged_thenFalse() {
+        var stabilizer = RecognitionStabilizer(policy: StabilizerPolicy(matchTimeout: 2))
+        #expect(!stabilizer.hasJudgedStranger)
+        stabilizer.ingest(.unusable, at: 0)
+        #expect(stabilizer.decision == .unknownPerson)
+        #expect(!stabilizer.hasJudgedStranger)
+
+        stabilizer.reset()
+        feed(&stabilizer, [.matched(alice), .matched(alice), .matched(alice)])
+        #expect(stabilizer.ingest(.unusable, at: 2.5) == .unknownPerson)
+        #expect(!stabilizer.hasJudgedStranger)
+        feed(&stabilizer, [.unusable, .unusable, .unusable, .unusable], from: 3)
+        #expect(!stabilizer.hasJudgedStranger)
+    }
+
+    @Test func hasJudgedStranger_whenJudgedFramesInARowMatchNobody_thenTrueAtTheThird() {
+        var stabilizer = RecognitionStabilizer()
+        feed(&stabilizer, [.unmatched, .unusable, .unmatched])
+        #expect(stabilizer.decision == .unknownPerson)
+        #expect(!stabilizer.hasJudgedStranger)
+        stabilizer.ingest(.unmatched, at: 1)
+        #expect(stabilizer.hasJudgedStranger)
+        feed(&stabilizer, [.unusable, .matched(alice)], from: 2)
+        #expect(stabilizer.decision == .unknownPerson)
+        #expect(stabilizer.hasJudgedStranger)
+    }
+
+    @Test func hasJudgedStranger_whenAMatchBreaksTheRun_thenStaysFalse() {
+        var stabilizer = RecognitionStabilizer()
+        feed(&stabilizer, [.unmatched, .unmatched, .matched(alice), .unmatched, .unmatched])
+        #expect(stabilizer.decision == .unknownPerson)
+        #expect(!stabilizer.hasJudgedStranger)
+    }
+
+    @Test func hasJudgedStranger_whenRecognizedProfileIsDropped_thenTrueUntilSomeoneIsRecognized() {
+        var stabilizer = RecognitionStabilizer()
+        feed(&stabilizer, [.matched(alice), .matched(alice), .matched(alice)])
+        #expect(!stabilizer.hasJudgedStranger)
+        feed(&stabilizer, [.matched(bob), .unmatched], from: 1)
+        #expect(!stabilizer.hasJudgedStranger)
+        #expect(stabilizer.ingest(.matched(bob), at: 1.2) == .unknownPerson)
+        #expect(stabilizer.hasJudgedStranger)
+
+        feed(&stabilizer, [.matched(bob), .matched(bob)], from: 1.3)
+        #expect(stabilizer.decision == .recognized(bob))
+        #expect(!stabilizer.hasJudgedStranger)
+
+        let alternating = (0..<6).map { $0.isMultiple(of: 2) ? FrameIdentity.matched(alice) : .matched(bob) }
+        feed(&stabilizer, alternating, from: 2)
+        #expect(stabilizer.decision == .unknownPerson)
+        #expect(stabilizer.hasJudgedStranger)
+        stabilizer.ingest(.noFace, at: 20)
+        #expect(stabilizer.decision == .nobody)
+        #expect(!stabilizer.hasJudgedStranger)
+    }
+
+    @Test func hasJudgedStranger_whenMatchTimesOutOnOneJudgedFrame_thenNotYet() {
+        var stabilizer = RecognitionStabilizer(policy: StabilizerPolicy(missesToDrop: 10, matchTimeout: 2))
+        feed(&stabilizer, [.matched(alice), .matched(alice), .matched(alice)])
+        #expect(stabilizer.ingest(.unmatched, at: 2.3) == .unknownPerson)
+        #expect(!stabilizer.hasJudgedStranger)
+    }
+
     @Test func reset_whenRecognized_thenNobody() {
         var stabilizer = RecognitionStabilizer()
         feed(&stabilizer, [.matched(alice), .matched(alice), .matched(alice)])

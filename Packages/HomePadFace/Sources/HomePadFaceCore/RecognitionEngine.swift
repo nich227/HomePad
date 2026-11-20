@@ -61,8 +61,14 @@ public struct RecognitionUpdate: Equatable, Sendable {
     /// Anything that vouched for the recognized member, such as a device biometric
     /// confirmation, no longer counts, even though the outcome may stay the same.
     public let matchedAnotherMember: Bool
-    /// Whether the session needs to hear about this update: the outcome or proximity differs
-    /// from the previous update, or `matchedAnotherMember` is set.
+    /// True when the outcome is `unknownPerson` only because the face in view cannot be judged,
+    /// or has not been judged enough to say it is someone else. It may still be the member who
+    /// was recognized a moment ago, so the session lets that member linger. False when judged
+    /// frames say the person is a stranger, and when a recognized member fails the liveness
+    /// test.
+    public let isFaceUnreadable: Bool
+    /// Whether the session needs to hear about this update: the outcome, proximity, or
+    /// `isFaceUnreadable` differs from the previous update, or `matchedAnotherMember` is set.
     public let didChange: Bool
 
     public init(
@@ -71,6 +77,7 @@ public struct RecognitionUpdate: Equatable, Sendable {
         isFacePresent: Bool,
         liveness: LivenessAssessment?,
         matchedAnotherMember: Bool = false,
+        isFaceUnreadable: Bool = false,
         didChange: Bool
     ) {
         self.outcome = outcome
@@ -78,6 +85,7 @@ public struct RecognitionUpdate: Equatable, Sendable {
         self.isFacePresent = isFacePresent
         self.liveness = liveness
         self.matchedAnotherMember = matchedAnotherMember
+        self.isFaceUnreadable = isFaceUnreadable
         self.didChange = didChange
     }
 
@@ -172,12 +180,14 @@ public struct RecognitionEngine: Sendable {
         matchedAnotherMember: Bool = false
     ) -> RecognitionUpdate {
         var assessment: LivenessAssessment?
+        var isFaceUnreadable = false
         let outcome: RecognitionOutcome
         switch stabilizer.decision {
         case .nobody:
             outcome = .nobody
         case .unknownPerson:
             outcome = .unknownPerson
+            isFaceUnreadable = !stabilizer.hasJudgedStranger
         case .recognized(let profileID):
             // The stabilizer can hold a member the liveness evidence is not about (after a stray
             // match of someone else). Then there is no evidence, which is judged as such.
@@ -197,14 +207,25 @@ public struct RecognitionEngine: Sendable {
             isFacePresent: isFacePresent,
             liveness: assessment,
             matchedAnotherMember: matchedAnotherMember,
+            isFaceUnreadable: isFaceUnreadable,
             didChange: outcome != latest.outcome || proximity.proximity != latest.proximity || matchedAnotherMember
+                || isFaceUnreadable != latest.isFaceUnreadable
         )
         return latest
     }
 }
 
-/// Applies recognition outcomes to the household session. The session itself ends what the
-/// camera started when the person leaves and keeps a profile that someone picked by hand.
+/// Applies recognition outcomes to the household session. The session decides what each report
+/// means for the audience: a member the camera can no longer see or judge lingers, and one who
+/// is replaced by a judged stranger or another member signs out.
+///
+/// | Camera | Report to the session |
+/// |---|---|
+/// | Nobody in view past the lock delay | `presenceLost` |
+/// | A face that cannot be judged, or not judged enough yet | `faceUnreadable` |
+/// | A judged face that is not a member, or a member's face that fails liveness | `unknownFacePresent` |
+/// | A member, liveness not established | `faceMatchedWithoutLiveness` |
+/// | A member, live | `faceRecognized` |
 @MainActor
 public final class HouseholdSessionDriver {
     public init() {}
@@ -218,15 +239,19 @@ public final class HouseholdSessionDriver {
         case .personalized(let profileID) where isMember:
             // The session keeps a device biometric confirmation across repeated matches of the
             // same member. A frame that matched someone else ends it: the fingerprint vouched for
-            // whoever stood there before.
-            if update.matchedAnotherMember, session.isConfirmedByDeviceBiometrics {
-                session.unknownFacePresent(proximity: update.proximity)
+            // whoever stood there before. The member does not sign out over one such frame.
+            if update.matchedAnotherMember {
+                session.dropDeviceBiometricConfirmation()
             }
-            session.faceMatchedWithoutLiveness(profileID: profileID, proximity: update.proximity)
+            session.faceMatchedWithoutLiveness(profileID: profileID, proximity: update.proximity, at: date)
         case .unlocked, .personalized, .unknownPerson:
-            session.unknownFacePresent(proximity: update.proximity)
+            if update.isFaceUnreadable {
+                session.faceUnreadable(proximity: update.proximity, at: date)
+            } else {
+                session.unknownFacePresent(proximity: update.proximity, at: date)
+            }
         case .nobody:
-            session.presenceLost()
+            session.presenceLost(at: date)
         }
     }
 }

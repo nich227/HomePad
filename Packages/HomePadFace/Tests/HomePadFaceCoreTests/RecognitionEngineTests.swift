@@ -197,6 +197,37 @@ import Testing
         }
     }
 
+    @Test func process_whenRecognizedMemberTurnsAway_thenUnknownButUnreadableUntilFramesSayItIsSomeoneElse() throws {
+        var engine = engine()
+        _ = try run(&engine, degrees: 0, count: 3, from: 0, depth: faceLikeDepth())
+        #expect(!engine.latest.isFaceUnreadable)
+
+        var turned = engine.process(try frame(at: 1, degrees: 0, pose: pose(yaw: 60)), templates: try templates())
+        #expect(turned.outcome.profileID == alice)
+        turned = engine.process(try frame(at: 3.5, degrees: 0, pose: pose(yaw: 60)), templates: try templates())
+        #expect(turned.outcome == .unknownPerson)
+        #expect(turned.isFaceUnreadable)
+        #expect(turned.didChange)
+        let still = engine.process(try frame(at: 3.6, degrees: 0, pose: pose(yaw: 60)), templates: try templates())
+        #expect(still.isFaceUnreadable)
+        #expect(!still.didChange)
+
+        let updates = try (0..<3).map { index in
+            engine.process(try frame(at: 4 + Double(index) * 0.1, degrees: 45), templates: try templates())
+        }
+        #expect(updates.map(\.outcome) == [.unknownPerson, .unknownPerson, .unknownPerson])
+        #expect(updates.map(\.isFaceUnreadable) == [true, true, false])
+        #expect(updates.map(\.didChange) == [false, false, true])
+    }
+
+    @Test func process_whenRecognizedFaceFailsLiveness_thenUnknownAndNotUnreadable() throws {
+        var engine = engine()
+        _ = try run(&engine, degrees: 0, count: 5, from: 0, depth: flatDepth())
+        #expect(engine.latest.outcome == .unknownPerson)
+        #expect(!engine.latest.isFaceUnreadable)
+        #expect(!RecognitionUpdate.idle.isFaceUnreadable)
+    }
+
     @Test func process_whenFaceLeavesPastTheLockDelay_thenNobodyAndEvidenceIsDropped() throws {
         var engine = engine()
         _ = try run(&engine, degrees: 0, count: 3, from: 0, depth: faceLikeDepth())
@@ -370,6 +401,47 @@ import Testing
         driver.apply(update(.unlocked(UUID())), to: session, at: date)
         #expect(session.activation == .none)
         #expect(session.isSomeonePresent)
+    }
+
+    @Test func apply_whenFaceIsUnreadable_thenRecognizedMemberLingersInsteadOfSigningOut() {
+        session.lingerDuration = 120
+        driver.apply(update(.unlocked(alice)), to: session, at: date)
+        let generation = session.audienceGeneration
+
+        let unreadable = RecognitionUpdate(
+            outcome: .unknownPerson, proximity: .mid, isFacePresent: true, liveness: nil, isFaceUnreadable: true, didChange: true
+        )
+        driver.apply(unreadable, to: session, at: date)
+        #expect(session.activation == .manual(alice))
+        #expect(!session.isPersonalContentUnlocked)
+        #expect(session.isSomeonePresent)
+        #expect(session.proximity == .mid)
+        #expect(session.lingerDeadline == date.addingTimeInterval(120))
+        #expect(session.audienceGeneration == generation)
+
+        driver.apply(update(.unknownPerson), to: session, at: date.addingTimeInterval(1))
+        #expect(session.activation == .none)
+        #expect(!session.isLingering)
+        #expect(session.audienceGeneration == generation + 1)
+    }
+
+    @Test func apply_whenNobodyIsInView_thenRecognizedMemberLingersFromThatMoment() {
+        session.lingerDuration = 120
+        driver.apply(update(.unlocked(alice)), to: session, at: date)
+        let generation = session.audienceGeneration
+        driver.apply(update(.nobody, .far), to: session, at: date.addingTimeInterval(4))
+        #expect(session.activation == .manual(alice))
+        #expect(session.lingerDeadline == date.addingTimeInterval(124))
+        driver.apply(update(.unlocked(alice)), to: session, at: date.addingTimeInterval(200))
+        #expect(session.audienceGeneration == generation + 2)
+    }
+
+    @Test func apply_whenAFrameMatchedAnotherMember_thenTheMemberDoesNotSignOut() {
+        confirmAlice()
+        let generation = session.audienceGeneration
+        driver.apply(update(.personalized(alice), matchedAnotherMember: true), to: session, at: date)
+        #expect(session.audienceGeneration == generation)
+        #expect(!session.isConfirmedByDeviceBiometrics)
     }
 
     @Test func apply_whenPersonalizedThenUnlocked_thenFaceActivationReplacesTheCameraMatch() {

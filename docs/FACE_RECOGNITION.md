@@ -49,14 +49,36 @@ package logs nothing.
 - `ProximityEstimator` turns the estimated distance into one of three zones (near, mid, far),
   with hysteresis at both boundaries. See "Distance and the three zones".
 
-The result is one of four outcomes, and `HouseholdSessionDriver` applies it to `HouseholdSession`:
+The result is one of four outcomes. `unknownPerson` comes in two kinds, told apart by
+`RecognitionUpdate.isFaceUnreadable`, and `HouseholdSessionDriver` applies each to
+`HouseholdSession`:
 
-| Outcome | Meaning | Session call |
+| What the camera has | Outcome | Session call |
 |---|---|---|
-| `unlocked(id)` | Enrolled face, liveness established | `faceRecognized(profileID:proximity:at:)` |
-| `personalized(id)` | Enrolled face, liveness not established | `faceMatchedWithoutLiveness(profileID:proximity:)` |
-| `unknownPerson` | A face that is not enrolled, cannot be told apart, or looks like a spoof | `unknownFacePresent(proximity:)` |
-| `nobody` | No face for the lock delay | `presenceLost()` |
+| A member's face, liveness established | `unlocked(id)` | `faceRecognized(profileID:proximity:at:)` |
+| A member's face, liveness not established | `personalized(id)` | `faceMatchedWithoutLiveness(profileID:proximity:at:)` |
+| A face that cannot be judged, or has not been judged enough to say whose it is | `unknownPerson`, `isFaceUnreadable` true | `faceUnreadable(proximity:at:)` |
+| A judged face that is not a member, or a member's face that looks like a spoof | `unknownPerson`, `isFaceUnreadable` false | `unknownFacePresent(proximity:at:)` |
+| No face for the lock delay | `nobody` | `presenceLost(at:)` |
+
+A face cannot be judged when it has no embedding, its capture quality is too low, or the head is
+turned past the yaw or pitch limit. A member who turns sideways in view is exactly that. The
+stabilizer says the unknown person is a stranger (`hasJudgedStranger`) only on evidence from
+judged frames:
+
+- a recognized member is dropped because three judged frames in a row were not theirs, or because
+  another member's matches contest the window, or
+- three judged frames in a row match nobody. Frames that cannot be judged neither count nor break
+  the run. A frame that matches any member breaks it.
+
+Until then the unknown person is reported as unreadable. That covers a member who turned away
+past the lock delay, and the first frames of anyone walking in. Once the stabilizer has judged a
+stranger it stays that way until someone is recognized or everyone leaves.
+
+The difference matters to the session. An unreadable face or an empty view lets a recognized
+member linger: personal content locks at once, and they stay signed in for the Stay Signed In
+After Stepping Away time. A judged stranger, or another member, signs them out at once. The rules
+are in the description of `HouseholdSession`.
 
 `personalized` changes the layout and keeps personal content locked. The session records it as a
 camera match, which is what Touch ID can later confirm (see "Touch ID as the second step"). When
@@ -150,7 +172,9 @@ How long a confirmation lasts:
 - It ends when the member leaves, when a stranger takes their place, and when another member is
   matched. It never carries over to another member.
 - A single frame that matches a different enrolled member ends it too, even though the stabilizer
-  keeps showing the first member. The fingerprint vouched for whoever stood there before.
+  keeps showing the first member. The fingerprint vouched for whoever stood there before. The
+  driver calls `dropDeviceBiometricConfirmation()` for this, which locks personal content and
+  does not sign the member out.
 - A single frame with no face, an unusable face, or no match does not end it. The stabilizer
   absorbs those frames and the session is not told.
 

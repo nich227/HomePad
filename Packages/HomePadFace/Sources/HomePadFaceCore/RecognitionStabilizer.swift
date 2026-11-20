@@ -58,8 +58,17 @@ public struct RecognitionStabilizer: Sendable {
 
     public let policy: StabilizerPolicy
     public private(set) var decision: PresenceDecision = .nobody
+    /// Whether judged frames say the unknown person is someone else: a recognized profile was
+    /// dropped because frames in a row were not theirs or matched another profile too often, or
+    /// `missesToDrop` judged frames in a row matched nobody. False while the decision is
+    /// `unknownPerson` only because the face cannot be judged or has not been judged enough,
+    /// which is what a member who turned away, or who is walking back in, looks like.
+    public private(set) var hasJudgedStranger = false
     private var window: [Entry] = []
     private var missStreak = 0
+    /// Judged frames in a row that matched nobody. Frames that cannot be judged do not count
+    /// and do not break the run.
+    private var unmatchedStreak = 0
     private var lastFaceAt: TimeInterval?
     private var lastMatchAt: TimeInterval?
 
@@ -111,6 +120,16 @@ public struct RecognitionStabilizer: Sendable {
     }
 
     private mutating func judge(_ profileID: UUID?, at timestamp: TimeInterval) {
+        resolve(profileID, at: timestamp)
+        unmatchedStreak = profileID == nil ? unmatchedStreak + 1 : 0
+        if case .recognized = decision {
+            hasJudgedStranger = false
+        } else if unmatchedStreak >= policy.missesToDrop {
+            hasJudgedStranger = true
+        }
+    }
+
+    private mutating func resolve(_ profileID: UUID?, at timestamp: TimeInterval) {
         lastFaceAt = timestamp
         window.append(Entry(time: timestamp, profileID: profileID))
         let maximumAge = policy.matchTimeout
@@ -132,6 +151,7 @@ public struct RecognitionStabilizer: Sendable {
             let contested = counts.contains { $0.key != current && $0.value > policy.maximumCompetingMatches }
             if missStreak >= policy.missesToDrop || contested {
                 decision = .unknownPerson
+                hasJudgedStranger = true
                 dropped = current
             }
             expireMatch(at: timestamp)
