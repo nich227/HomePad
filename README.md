@@ -3,15 +3,18 @@
 HomePad turns an iPad into a shared home screen modeled on Apple HomeView. The iPad is the **hub**.
 Each household member's iPhone runs the same app as a **companion**.
 
-iPhone and iPad only, iOS and iPadOS 27 or later. Bundle ID `com.kevster.HomePad`.
+iPhone and iPad only, iOS and iPadOS 27 or later. HomePad runs only on a device where Apple
+Intelligence is supported and turned on. Bundle ID `com.kevster.HomePad`.
 
 ## What it does
 
 | Feature | How |
 |---|---|
-| Faces and a personal Home Screen | Eleven faces drawn on a square canvas like HomeView's screen, with apps and widgets per household member |
+| Faces and a personal Home Screen | Liquid Glass faces that fill the display and show more as someone comes closer, a red Night Mode, and apps and widgets per household member |
 | Face recognition for any number of people | Vision finds and aligns the face, a bundled Core ML model (SFace, Apache-2.0) turns it into a vector, TrueDepth depth rejects photos |
-| Beam a page from iPhone to iPad | A paired, encrypted local link, the share sheet, SharePlay, or Handoff |
+| Beam a page from iPhone to iPad | A paired, encrypted local link, the share sheet, SharePlay, or Handoff. Each person has a browser locked to the app, and all of its pages close when that person leaves |
+| Recipes | A beamed recipe opens in a step-by-step reader, and the on-device model tidies it after checking every amount against the page |
+| Assistant | An in-app assistant on the on-device model, with a glowing edge and a glass answer card. Siri can run the same hub actions |
 | iPhone content on the hub | The iPhone projects Calendar, Reminders, and Now Playing as templates, the way CarPlay apps reach HomeView |
 | Household notes | Short notes between the hub and paired iPhones. An iMessage extension sends a page link to the hub |
 | Kiosk lock | The iPad stays on HomePad until someone enters the iPad passcode |
@@ -26,20 +29,23 @@ open HomePad.xcodeproj
 ```
 
 Pick the `HomePad` scheme and an iPad or iPhone. Signing uses team `8ZUR795GTN`
-(`Config/Shared.xcconfig`). The app needs the App Groups, HomeKit, and Group Activities
+(`Config/Shared.xcconfig`). The app needs the App Groups, HomeKit, Group Activities, and WeatherKit
 capabilities on that team.
 
 ## First run on the iPad
 
 1. Open HomePad and choose Add People. Add each household member and enroll a face.
 2. Open Pairing, then scan the code with HomePad on each iPhone (Beam tab).
-3. In Settings > Apps > HomePad, turn Setup Mode off.
-4. For the kiosk lock, follow `docs/KIOSK.md`.
+3. Allow the camera, Home, location, microphone, and speech recognition when HomePad asks.
+4. In Settings > Apps > HomePad, turn Setup Mode off.
+5. For the kiosk lock, follow `docs/KIOSK.md`.
 
 ## What the platform does not allow
 
 - **Messages and calls.** No app can read the Messages inbox or take over a phone or FaceTime
   call, so the hub shows neither.
+- **Siri itself.** An app cannot be woken by "Siri" or show Siri's overlay. The Assistant is
+  HomePad's own, opened by touch.
 - **Face ID.** Recognition here is personalization. It does not run in the Secure Enclave, and
   only an iPad with a TrueDepth camera can unlock personal content from a face match.
 - **Blocking the Home gesture.** An app can lock the iPad to itself only on a supervised iPad
