@@ -345,6 +345,11 @@ selection (`CompanionSection`) serves both, so opening and closing the device ke
 - The system places the bars. On iPhone Duo's outer display it draws tab bars and toolbars
   down the side, and the companion does not opt out anywhere (`toolbarVerticalBehavior` is not
   used). The package presents no sheets, so `presentationPlacement` is not used either.
+- Where the tab bar is along the bottom, it floats over the list behind it. On a phone on its
+  side a list is longer than the screen, so it starts with a row under the bar and scrolls
+  until its last row is above the bar. That is the system's behavior for a `TabView` and the
+  companion adds no inset of its own. `CompanionWalkthroughTests` checks it on an iPhone on
+  its side and `DuoWalkthroughTests` at the size of the outer display.
 - When the inner display is partly folded, the split view gives each column one side of the
   fold. That is the system's behavior for `NavigationSplitView`; the companion adds nothing.
   Apple's guidance is to keep an `ArrangementView` out of a split view, so none is used here.
@@ -932,8 +937,9 @@ Screenshot names (with `pt-` in front for the upright walk):
 | `e60` to `e62` | Solid glass | Home Modular, control center, Home Screen |
 | `f1` to `f6` | Slow motion | Frames through face to Home Screen, an app opening from its icon and closing into it, the control center opening, night coming on, and the assistant after a pull from the top center |
 | `p10` to `p13`, `p20` | iPhone | The four companion tabs, and the Hub tab with a summary |
-| `d10` to `d40` | iPad mini, companion | The companion at the outer and inner display sizes |
-| `h10` to `h52` | iPad mini, hub | The hub at the inner and outer display sizes, upright and on its side, the control center, Night Mode, the square canvas, Home Modular and its dial, and the folded panes |
+| `p30` to `p33` | iPhone on its side | The Hub and Beam tabs as they open, with a row under the tab bar, and scrolled to the end, with the last row above it |
+| `d10` to `d40` | iPad mini, companion | The companion at the outer and inner display sizes. `d34` and `d35` are the outer display on its side with each list scrolled to the end |
+| `h10` to `h54` | iPad mini, hub | The hub at the inner and outer display sizes, upright and on its side, the control center, Night Mode, the square canvas, Home Modular and its dial, the Home Screen over a face that has color, and the folded panes |
 
 The `d` and `h` images show the whole iPad mini screen with the framed app in the middle.
 

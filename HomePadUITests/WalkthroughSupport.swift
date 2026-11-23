@@ -245,6 +245,33 @@ class WalkthroughCase: XCTestCase {
         return true
     }
 
+    /// A tab bar floats over the list behind it, so a long list starts with rows under the
+    /// bar. Scrolls that list to its end, saves a screenshot, and checks that the element
+    /// named last then sits above the bar, where it can be read and tapped.
+    func checkEndOfListClearsTabBar(_ last: XCUIElement, snapshot name: String) {
+        let bar = app.tabBars.firstMatch
+        func barTop() -> CGFloat {
+            bar.buttons.allElementsBoundByIndex.map(\.frame.minY).min() ?? bar.frame.minY
+        }
+        let top = barTop()
+        note("\(name), before scrolling: tab bar \(bar.frame), its buttons from y \(top), last row \(last.exists ? "\(last.frame)" : "not loaded yet")")
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        for _ in 0..<2 {
+            let start = origin.withOffset(CGVector(dx: bar.frame.midX, dy: top - 30))
+            let end = origin.withOffset(CGVector(dx: bar.frame.midX, dy: top - 250))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .default, thenHoldForDuration: 0.3)
+            pause(1)
+        }
+        snapshot(name)
+        guard last.waitForExistence(timeout: 3) else {
+            note("\(name): the last row is missing after scrolling to the end")
+            XCTFail("\(name): the last row is missing after scrolling to the end")
+            return
+        }
+        note("\(name), at the end: its buttons from y \(barTop()), last row \(last.frame)")
+        XCTAssertLessThanOrEqual(last.frame.maxY, barTop() + 0.5, "\(name): the end of the list stays under the tab bar")
+    }
+
     func slug(_ text: String) -> String {
         text.lowercased().replacingOccurrences(of: " ", with: "-")
     }

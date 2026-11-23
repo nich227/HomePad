@@ -82,9 +82,11 @@ final class DuoWalkthroughTests: WalkthroughCase {
         XCTAssertTrue(app.tabBars.firstMatch.waitForExistence(timeout: 60), "the outer display on its side should show tabs")
         settle()
         snapshot("d32-outer-landscape-companion-hub-summary")
+        checkEndOfListClearsTabBar(app.staticTexts["Song"], snapshot: "d34-outer-landscape-companion-hub-summary-at-the-end")
         app.tabBars.firstMatch.buttons["Beam"].tap()
         pause(1.5)
         snapshot("d33-outer-landscape-companion-beam")
+        checkEndOfListClearsTabBar(app.buttons["Scan Pairing Code"], snapshot: "d35-outer-landscape-companion-beam-at-the-end")
         XCTAssertEqual(app.state, .runningForeground)
     }
 
@@ -133,6 +135,18 @@ final class DuoWalkthroughTests: WalkthroughCase {
             thermostat.tap()
             pause(1.5)
             snapshot("h52-inner-hub-thermostat-dial")
+        }
+
+        // The Home Screen over a face that has color, on each display. Which face depends on
+        // how many of the swipes the pager takes.
+        for (size, name) in [(Size.inner, "h53-inner-hub-home-screen-over-a-colored-face"), (Size.outer, "h54-outer-hub-home-screen-over-a-colored-face")] {
+            hub(member, Hook.viewport(size))
+            for _ in 0..<4 {
+                app.swipeLeft()
+                pause(1.2)
+            }
+            openHomeScreen()
+            snapshot(name)
         }
 
         // Partly folded, held upright: the fold runs across, the face above and the rest below.
