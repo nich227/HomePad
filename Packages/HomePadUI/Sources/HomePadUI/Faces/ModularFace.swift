@@ -193,12 +193,20 @@ struct ArtworkView: View {
             } else {
                 ZStack {
                     LinearGradient(colors: [Color(RainbowTint.blue), Color(RainbowTint.purple)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Image(systemName: "music.note")
-                        .resizable()
-                        .scaledToFit()
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.all, 24)
-                        .frame(maxWidth: 120, maxHeight: 120)
+                    GeometryReader { proxy in
+                        // A fixed margin round the note is wider than a small tile, and a
+                        // view cannot be laid out smaller than its padding, so the tile grew
+                        // out of the pill. The note takes half of a small tile and keeps
+                        // its margin on a large one.
+                        let side = min(proxy.size.width, proxy.size.height)
+                        let note = min(72, max(side - 48, side * 0.5))
+                        Image(systemName: "music.note")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: note, height: note)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                    }
                 }
             }
         }
