@@ -24,6 +24,10 @@ iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this dir
 10. `HomePadIdentifiers` (Core) and `Config/Shared.xcconfig` must agree on bundle prefix and app group.
 11. lottie-ios is the only third-party dependency. Animation JSON is generated, not downloaded.
 12. Build output goes under `build/` (ignored by git and by the workspace file sync).
+13. Commits use this repository's own git identity (`git config --local user.name` and
+    `user.email`, the `nich227` GitHub account). Never pass `--author`, never set the identity
+    through the environment, and never commit under another account. One concern per commit:
+    one package or one purpose, with a conventional subject (`feat(beam): ...`). Never push.
 
 ## File map
 
