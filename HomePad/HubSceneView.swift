@@ -103,7 +103,8 @@ struct HubSceneView: View {
             ),
             assistant: assistantSlot,
             intercom: intercomSlot,
-            calendar: calendarSlot
+            calendar: calendarSlot,
+            liveItems: { liveItems }
         )
     }
 
@@ -123,6 +124,34 @@ struct HubSceneView: View {
         guard hub.intercom.isEnabled else { return nil }
         let intercom = hub.intercom
         return { AnyView(HouseholdNoteComposer(intercom: intercom)) }
+    }
+
+    /// What the pill at the top of a face carries from outside the shell: the household note on
+    /// screen and the pages waiting for the person in front. Both are marked personal, so a
+    /// guest never sees them. The banners still carry the buttons.
+    private var liveItems: [LivePillItem] {
+        var items: [LivePillItem] = []
+        if let note = hub.intercom.currentNote {
+            items.append(LivePillItem(
+                id: "note-\(note.id.uuidString)",
+                kind: .note,
+                symbolName: "waveform",
+                title: note.senderName,
+                detail: note.text,
+                isPersonal: true
+            ))
+        }
+        for beam in hub.receiver.pending {
+            items.append(LivePillItem(
+                id: "page-\(beam.id.uuidString)",
+                kind: .page,
+                symbolName: "dot.radiowaves.up.forward",
+                title: beam.title ?? beam.url.host() ?? String(localized: "Web page"),
+                detail: beam.sender.name,
+                isPersonal: true
+            ))
+        }
+        return items
     }
 
     /// The Calendar a member's iPhone projects, when the person in front of the hub may see it.
