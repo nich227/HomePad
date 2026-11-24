@@ -47,6 +47,8 @@ iPadOS and iOS 27+ app. iPad is the hub, iPhone is the companion. Root: this dir
 | `Extensions/BeamShare` | Share extension, links `HomePadBeam` |
 | `Extensions/MessagesExtension` | iMessage extension, links `HomePadMessagingCore` only |
 | `HomePadUITests` | Simulator walkthrough that saves screenshots |
+| `.github/workflows/test.yml` | GitHub Actions: package tests with the coverage floor, and an unsigned device build. Runs on `main`, the branch name on GitHub |
+| `LICENSE`, `NOTICE` | Apache License 2.0, and the copyright and third-party attributions |
 | `Packages/HomePadCore` | Profiles, `HouseholdSession`, `HomePadSettings`, `PeerChannel`, identifiers |
 | `Packages/HomePadUI` | Faces, Home Screen, native apps, `HubFeatureSlots`, companion shell |
 | `Packages/HomePadFace` | Camera, Vision, Core ML embedder, enrollment, recognition, liveness |

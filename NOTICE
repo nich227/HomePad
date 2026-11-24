@@ -1,0 +1,9 @@
+HomePad
+Copyright 2026 Kevin Chen
+
+This product includes the SFace face recognition model from the OpenCV Model Zoo
+(https://github.com/opencv/opencv_zoo), licensed under the Apache License, Version 2.0.
+See HomePad/Models/NOTICE.md.
+
+This product uses lottie-ios (https://github.com/airbnb/lottie-ios), licensed under the
+Apache License, Version 2.0.

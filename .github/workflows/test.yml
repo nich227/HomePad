@@ -1,0 +1,74 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# macOS runners are handed out a few at a time. A newer push makes the older run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here reads a secret or writes to the repository.
+permissions:
+  contents: read
+
+env:
+  # HomePad needs the iOS 27.2 SDK. The xcode-27 image has Xcode 27.2, but not as its default.
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+
+jobs:
+  packages:
+    name: ${{ matrix.package }}
+    runs-on: xcode-27
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        package:
+          - HomePadCore
+          - HomePadAnimations
+          - HomePadKiosk
+          - HomePadFace
+          - HomePadBeam
+          - HomePadMessaging
+          - HomePadAssistant
+          - HomePadUI
+          # Its tests also fail when HomePad/Settings.bundle is stale.
+          - HomePadSettingsCatalog
+    env:
+      PACKAGE: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Show the toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -F "iPhone 18 Pro"
+      - name: Run the tests on the iPhone simulator
+        run: |
+          set -o pipefail
+          Scripts/test-package.sh "$PACKAGE" | tee "$RUNNER_TEMP/test.out"
+      - name: Hold the logic target at 100% line coverage
+        run: Scripts/check-coverage.sh "$PACKAGE" "$RUNNER_TEMP/test.out"
+      - name: Show the end of the log
+        if: failure()
+        run: tail -n 150 "${TMPDIR:-/tmp}/homepad-test-$PACKAGE.log" || true
+
+  app:
+    name: app and extensions
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - run: brew install xcodegen
+      # A device build without signing compiles the app, the share extension, and the iMessage
+      # extension against the real SDK. Signing needs credentials, and this workflow has none.
+      - name: Build for a device, unsigned
+        run: |
+          set -o pipefail
+          xcodegen generate
+          xcodebuild -project HomePad.xcodeproj -scheme HomePad -configuration Debug \
+            -destination 'generic/platform=iOS' -derivedDataPath build/DerivedData-Device \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 80
